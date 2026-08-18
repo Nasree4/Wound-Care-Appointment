@@ -14,12 +14,11 @@
     <style>
         body { font-family: 'Sarabun', sans-serif; }
         .logo-bw {
-            /* ดัน Contrast ขั้นสุด และลด Brightness เพื่อบังคับสีให้เป็น #000000 ขาวดำ 100% */
             filter: grayscale(100%) brightness(60%) contrast(2000%);
             -webkit-filter: grayscale(100%) brightness(60%) contrast(2000%);
         }
         
-        /* ตั้งค่าสำหรับการพิมพ์ */
+        /* ตั้งค่าสำหรับการพิมพ์ A6 */
         @media print {
             body { 
                 background: white !important; 
@@ -35,27 +34,30 @@
                 overflow: hidden !important; 
             }
             @page { 
-                size: 105mm 148mm; /* ปรับขนาดกระดาษเป็น A6 มาตรฐาน */
+                size: 105mm 148mm portrait; 
                 margin: 0; 
             }
             .print-area { 
                 width: 105mm !important; 
                 height: 148mm !important; 
                 border: none !important; 
-                padding: 4mm !important; /* ลดขอบกระดาษลงเพื่อเพิ่มพื้นที่ด้านใน */
+                padding: 4mm !important; 
                 margin: 0 !important; 
-                box-sizing: border-box; 
+                box-sizing: border-box !important; 
                 box-shadow: none !important; 
-                position: absolute !important; 
+                position: relative !important; 
                 top: 0 !important;
                 left: 0 !important; 
                 visibility: visible !important; 
                 display: flex !important;
+                flex-direction: column !important;
                 color: #000000 !important;
                 background: white !important;
+                page-break-inside: avoid;
+                break-inside: avoid;
             }
-            img.header-logo { max-height: 60px !important; }
-            .watermark { opacity: 0.25 !important; }
+            img.header-logo { max-height: 50px !important; }
+            .watermark { opacity: 0.20 !important; }
             .print-area * {
                 color: #000000 !important;
                 border-color: #000000 !important;
@@ -68,7 +70,7 @@
         
         @media screen {
             .print-area {
-                width: 105mm; /* พรีวิวหน้าจอให้ตรงกับขนาด A6 */
+                width: 105mm;
                 height: 148mm;
             }
         }
@@ -84,7 +86,7 @@
             "Laceration (แผลฉีกขาด)", "Abrasion (แผลถลอก)", "I&D (กรีดระบายหนอง)", 
             "Puncture (แผลถูกแทง)", "Avulsion (แผลถูกกระชาก)", "Excision (การตัดเนื้อออก)",
             "Cellulitis", "Amputate", "สัตว์กัด (Animal bite)", "สัตว์ข่วน (Animal scratch)", 
-            "Burn", "ถอดเล็บ (Nail extraction)", "แผลเบาหวาน(DM Ulcer)", "แผลผ่าตัด (Surgical wound)", 
+            "Burn", "ถอดเล็บ (Nail extraction)", "แผลเบาหวาน (DM Ulcer)", "แผลผ่าตัด (Surgical wound)", 
             "Debridement", "Aspirate"
         ];
         
@@ -104,6 +106,7 @@
         const DRAFT_KEY = 'woundcare_draft_v1';
 
         const addDays = (dateStr, n) => {
+            if (!dateStr || !dateStr.includes('-')) return dateStr;
             const [y, m, d] = dateStr.split('-').map(Number);
             const res = new Date(y, m - 1, d);
             res.setDate(res.getDate() + n);
@@ -111,9 +114,18 @@
         };
 
         const addMonths = (dateStr, n) => {
+            if (!dateStr || !dateStr.includes('-')) return dateStr;
             const [y, m, d] = dateStr.split('-').map(Number);
-            const res = new Date(y, m - 1 + n, d);
-            return `${res.getFullYear()}-${String(res.getMonth()+1).padStart(2,'0')}-${String(res.getDate()).padStart(2,'0')}`;
+            
+            const targetMonthDate = new Date(y, (m - 1) + n, 1);
+            const targetYear = targetMonthDate.getFullYear();
+            const targetMonth = targetMonthDate.getMonth();
+            
+            const maxDaysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+            const actualDay = Math.min(d, maxDaysInTargetMonth);
+            const finalDate = new Date(targetYear, targetMonth, actualDay);
+            
+            return `${finalDate.getFullYear()}-${String(finalDate.getMonth()+1).padStart(2,'0')}-${String(finalDate.getDate()).padStart(2,'0')}`;
         };
 
         const formatThaiDate = (dateStr, opts) => {
@@ -129,12 +141,11 @@
             if (!birthday || birthday === '-' || typeof birthday !== 'string') return '';
             let birthDate;
             
-            // รองรับรูปแบบ DD/MM/YYYY หรือ YYYY-MM-DD
             if (birthday.includes('/')) {
                 const parts = birthday.split('/');
                 if (parts.length === 3) {
                     let year = parseInt(parts[2], 10);
-                    if (year > 2400) year -= 543; // แปลง พ.ศ. เป็น ค.ศ.
+                    if (year > 2400) year -= 543;
                     birthDate = new Date(year, parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
                 }
             } else if (birthday.includes('-')) {
@@ -220,7 +231,7 @@
             const vaccines = appt.calculatedDates ? [...new Set(appt.calculatedDates.map(d => d.category))] : [];
             
             const getCategoryTitle = (cat) => {
-                if (cat === 'dT') return 'วัคซีนบาดทะยัก';
+                if (cat === 'dT') return 'วัคซีนบาดทะยัก (dT)';
                 if (cat === 'PCEC') return 'วัคซีนพิษสุนัขบ้า (Rabies Vaccine)';
                 return `ตารางนัดฉีดวัคซีน ${cat}`;
             };
@@ -228,8 +239,7 @@
             return (
                 <div className="print-area bg-white p-[4mm] text-black border border-slate-300 shadow-2xl print:shadow-none print:border-none print:m-0 print:p-[4mm] overflow-hidden flex flex-col relative font-sans leading-tight mx-auto">
                     
-                    {/* ลายน้ำ */}
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-[0.25] pointer-events-none watermark">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-[0.20] pointer-events-none watermark">
                         <img src="https://img1.pic.in.th/images/1bf299103031b07d1.png" alt="Watermark" className="w-[75mm] h-auto object-contain logo-bw" onError={(e) => e.target.style.display = 'none'} />
                     </div>
 
@@ -245,7 +255,6 @@
                     </div>
 
                     <div className="space-y-1 mb-1.5 relative z-10 text-black">
-                        {/* แถวที่ 1: ชื่อ-สกุล และ HN */}
                         <div className="flex justify-between items-end border-b border-dotted border-black pb-0.5 gap-1">
                             <div className="flex items-baseline flex-1 min-w-0">
                                 <strong className="text-[11px] shrink-0 mr-1 font-bold">ชื่อ-สกุล:</strong> 
@@ -267,7 +276,6 @@
                             </div>
                         </div>
                         
-                        {/* แถวที่ 2: สิทธิ และ นน. */}
                         <div className="flex justify-between items-end border-b border-dotted border-black pb-0.5 gap-1">
                             <div className="flex items-baseline flex-1 min-w-0">
                                 <strong className="text-[11px] shrink-0 mr-1 font-bold">สิทธิ:</strong> 
@@ -313,7 +321,7 @@
                                 <thead>
                                     <tr className="bg-gray-50 border-b border-black font-black text-[8px]">
                                         <th className="px-1 py-[2px] text-left border-r border-black text-black">รายการ</th>
-                                        <th className="px-1 py-[2px] text-left border-r border-black w-20 text-black text-center">วันที่นัด</th>
+                                        <th className="px-1 py-[2px] text-center border-r border-black w-24 text-black">วันที่นัด</th>
                                         <th className="px-1 py-[2px] text-center w-10 text-black italic">ผู้ฉีด</th>
                                     </tr>
                                 </thead>
@@ -380,10 +388,21 @@
             const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
             const [validationErrors, setValidationErrors] = useState([]);
 
-            // เพิ่ม State สำหรับหน้ารายชื่อนัด
-            const [filterDate, setFilterDate] = useState(() => new Date().toLocaleDateString('en-CA'));
+            // State สำหรับประวัติการนัดหมายย้อนหลังของคนไข้
+            const [patientHistory, setPatientHistory] = useState([]);
+            const [showHistoryModal, setShowHistoryModal] = useState(false);
+
+            // State สำหรับเลือกช่วงวันที่ในหน้ารายชื่อนัด
+            const [filterStartDate, setFilterStartDate] = useState(() => new Date().toLocaleDateString('en-CA'));
+            const [filterEndDate, setFilterEndDate] = useState(() => new Date().toLocaleDateString('en-CA'));
             const [localAppointments, setLocalAppointments] = useState(() => {
                 try { return JSON.parse(localStorage.getItem('woundcare_appointments_db') || '[]'); } 
+                catch (e) { return []; }
+            });
+
+            // ประวัติฉบับสมบูรณ์ที่บันทึกในเครื่อง
+            const [historyLogs, setHistoryLogs] = useState(() => {
+                try { return JSON.parse(localStorage.getItem('woundcare_history_logs') || '[]'); }
                 catch (e) { return []; }
             });
 
@@ -393,7 +412,6 @@
             const [dtSchedule, setDtSchedule] = useState('none'); 
             const [pcecSchedule, setPcecSchedule] = useState('none');
 
-            // โหลด draft จาก localStorage
             const [appointment, setAppointment] = useState(() => {
                 try {
                     const saved = localStorage.getItem(DRAFT_KEY);
@@ -430,6 +448,10 @@
                             patient: selectedPatient,
                             wasManual: isManualEntry 
                         }));
+                        // เมื่อเปลี่ยนคนไข้ ให้โหลดประวัติของคนไข้คนนั้น
+                        loadPatientHistory(selectedPatient.hn);
+                    } else {
+                        setPatientHistory([]);
                     }
                 } catch (e) {}
             }, [selectedPatient, isManualEntry]);
@@ -446,16 +468,23 @@
                 } catch (e) {}
             };
 
+            // โหลดประวัติการนัดย้อนหลังเฉพาะ HN ที่เลือก
+            const loadPatientHistory = (hn) => {
+                if (!hn) return;
+                const filtered = historyLogs.filter(h => String(h.patient?.hn) === String(hn));
+                setPatientHistory(filtered);
+            };
+
             const toggleManualEntry = () => {
                 const nextManualState = !isManualEntry;
                 setIsManualEntry(nextManualState);
                 setSelectedPatient(nextManualState ? { hn: searchHn, pname: '', fname: '', lname: '', privilege: '', cid: '', birthday: '' } : null);
             };
 
-            // คำนวณวันนัดวัคซีนอัตโนมัติ
             useEffect(() => {
                 let dates = [];
                 const start = appointment.visitDate;
+                if (!start) return;
                 
                 if (pcecSchedule === 'PCEC_IM_Essen') {
                     [0, 3, 7, 14, 28].forEach((d, i) => dates.push({ label: `SPEEDA #${i + 1} (D${d})`, date: addDays(start, d), desc: 'IM (0.5 ml) แขน 1 ข้าง', status: d === 0 ? 'ฉีดแล้ว' : 'นัดหมาย', category: 'PCEC' }));
@@ -472,10 +501,14 @@
                 }
 
                 if (dtSchedule === 'dT_new') {
+                    const dose1Date = start;
+                    const dose2Date = addMonths(dose1Date, 1);
+                    const dose3Date = addMonths(dose2Date, 6);
+                    
                     dates.push(
-                        { label: 'dT เข็ม 1', date: start, desc: 'IM (0.5 ml)', status: 'ฉีดแล้ว', category: 'dT' },
-                        { label: 'dT เข็ม 2 (+1ด)', date: addMonths(start, 1), desc: 'IM (0.5 ml)', status: 'นัดหมาย', category: 'dT' },
-                        { label: 'dT เข็ม 3 (+6ด)', date: addMonths(addMonths(start, 1), 6), desc: 'IM (0.5 ml)', status: 'นัดหมาย', category: 'dT' }
+                        { label: 'dT เข็ม 1', date: dose1Date, desc: 'IM (0.5 ml)', status: 'ฉีดแล้ว', category: 'dT' },
+                        { label: 'dT เข็ม 2 (+1ด)', date: dose2Date, desc: 'IM (0.5 ml)', status: 'นัดหมาย', category: 'dT' },
+                        { label: 'dT เข็ม 3 (+6ด)', date: dose3Date, desc: 'IM (0.5 ml)', status: 'นัดหมาย', category: 'dT' }
                     );
                 } else if (dtSchedule === 'dT_booster') {
                     dates.push({ label: 'dT (กระตุ้น)', date: start, desc: 'IM (0.5 ml) เข้ากล้ามเนื้อ', status: 'ฉีดแล้ว', category: 'dT' });
@@ -508,6 +541,7 @@
                     if (found) {
                         setSelectedPatient(found);
                         setIsManualEntry(false);
+                        loadPatientHistory(found.hn);
                         showNotification("ค้นหาข้อมูลคนไข้สำเร็จ", "success");
                     } else { showNotification("ไม่พบ HN นี้ในระบบ", "error"); }
                 } catch (err) { 
@@ -558,6 +592,18 @@
                         throw new Error(result.message || 'Apps Script error');
                     }
 
+                    // บันทึกลงใน History Logs ประวัติรวมในเครื่อง
+                    const newLogItem = {
+                        id: Date.now(),
+                        savedAt: new Date().toISOString(),
+                        patient: selectedPatient,
+                        appt: appointment
+                    };
+                    const updatedLogs = [newLogItem, ...historyLogs];
+                    setHistoryLogs(updatedLogs);
+                    localStorage.setItem('woundcare_history_logs', JSON.stringify(updatedLogs));
+                    loadPatientHistory(selectedPatient.hn);
+
                     // บันทึกนัดหมายในอนาคตลง localStorage สำหรับหน้ารายชื่อ
                     const futureAppts = [];
                     if (appointment.stitchRemovalDate) {
@@ -590,7 +636,7 @@
                         localStorage.setItem('woundcare_appointments_db', JSON.stringify(updatedAppts));
                     }
 
-                    showNotification("บันทึกนัดหมายลง Google Sheets สำเร็จ ✓", "success");
+                    showNotification("บันทึกนัดหมายลง Google Sheets และเก็บประวัติสำเร็จ ✓", "success");
                     clearDraft();
 
                 } catch (err) { 
@@ -616,7 +662,16 @@
                 setDtSchedule('none');
                 setPcecSchedule('none');
                 setAppointment(defaultAppointment);
+                setPatientHistory([]);
                 showNotification("ล้างข้อมูลแล้ว พร้อมเริ่มใหม่", "success");
+            };
+
+            // โหลดใบนัดเก่าขึ้นมาแสดงในฟอร์มเพื่อพิมพ์ซ้ำ
+            const restoreHistoryToForm = (log) => {
+                setSelectedPatient(log.patient);
+                setAppointment(log.appt);
+                setShowHistoryModal(false);
+                showNotification(`โหลดข้อมูลใบนัดวันที่ ${formatThaiDate(log.appt.visitDate)} เรียบร้อย`, "success");
             };
 
             return (
@@ -637,6 +692,69 @@
                             <div className="bg-white rounded-3xl px-8 py-6 shadow-2xl flex items-center gap-4">
                                 <div className="w-6 h-6 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
                                 <span className="font-black text-slate-700">กำลังดำเนินการ...</span>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Modal แสดงประวัติการนัดย้อนหลัง */}
+                    {showHistoryModal && (
+                        <div className="fixed inset-0 z-[180] bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+                            <div className="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                                    <div>
+                                        <h3 className="font-black text-slate-800 text-base flex items-center gap-2">
+                                            <span>📜</span> ประวัติการรับบริการย้อนหลัง
+                                        </h3>
+                                        <div className="text-xs font-bold text-slate-500 mt-0.5">
+                                            HN: <span className="text-emerald-600 font-black">{selectedPatient?.hn}</span> - {selectedPatient?.pname}{selectedPatient?.fname} {selectedPatient?.lname}
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setShowHistoryModal(false)} className="w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 flex items-center justify-center font-black text-slate-600 transition">✕</button>
+                                </div>
+                                
+                                <div className="p-5 overflow-y-auto space-y-3 custom-scrollbar flex-1">
+                                    {patientHistory.length === 0 ? (
+                                        <div className="py-12 text-center text-slate-400 font-bold">
+                                            ไม่พบประวัติการทำใบนัดย้อนหลังของคนไข้รายนี้ในระบบ
+                                        </div>
+                                    ) : (
+                                        patientHistory.map((item, idx) => (
+                                            <div key={item.id || idx} className="p-4 border border-slate-200 rounded-2xl bg-slate-50/50 hover:bg-slate-50 transition flex flex-col md:flex-row justify-between gap-3 items-start md:items-center">
+                                                <div className="space-y-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="bg-emerald-100 text-emerald-800 text-[11px] font-black px-2.5 py-0.5 rounded-lg">
+                                                            วันที่รับบริการ: {formatThaiDate(item.appt?.visitDate, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                        </span>
+                                                        <span className="text-[10px] text-slate-400 font-bold">
+                                                            (บันทึกเมื่อ: {new Date(item.savedAt).toLocaleDateString('th-TH')})
+                                                        </span>
+                                                    </div>
+                                                    <div className="text-xs text-slate-700 font-bold space-x-2">
+                                                        <span><strong>แผล:</strong> {item.appt?.woundType || '-'}</span>
+                                                        <span>•</span>
+                                                        <span><strong>ตำแหน่ง:</strong> {item.appt?.woundLocation || '-'}</span>
+                                                        <span>•</span>
+                                                        <span><strong>ทำแผล:</strong> {item.appt?.dressingFrequency}</span>
+                                                    </div>
+                                                    {item.appt?.stitchRemovalDate && (
+                                                        <div className="text-xs text-blue-600 font-bold">
+                                                            ✂️ กำหนดตัดไหม: {formatThaiDate(item.appt?.stitchRemovalDate)}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <button 
+                                                    onClick={() => restoreHistoryToForm(item)} 
+                                                    className="shrink-0 bg-slate-900 hover:bg-emerald-600 text-white text-xs font-black px-4 py-2 rounded-xl transition active:scale-95 shadow-sm"
+                                                >
+                                                    ดึงข้อมูล/พิมพ์อีกครั้ง 🖨️
+                                                </button>
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                                <div className="p-4 bg-slate-50 border-t border-slate-100 text-right">
+                                    <button onClick={() => setShowHistoryModal(false)} className="px-5 py-2 bg-slate-200 hover:bg-slate-300 font-black text-xs rounded-xl text-slate-700">ปิดหน้าต่าง</button>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -662,14 +780,42 @@
                         {mode === 'list' ? (
                             <div className="print:hidden max-w-5xl mx-auto animate-in fade-in duration-300 pb-20">
                                 <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-200 shadow-sm">
-                                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4">
                                         <h2 className="text-lg font-black text-slate-800 uppercase tracking-wide flex items-center gap-2">
                                             <span className="text-2xl">📅</span> รายชื่อผู้ป่วยนัดหมาย
                                         </h2>
-                                        <div className="flex items-center gap-3 bg-slate-50 p-2 rounded-2xl border border-slate-200 w-full md:w-auto">
-                                            <label className="text-xs font-black text-slate-500 uppercase px-2 shrink-0">เลือกวันที่นัด</label>
-                                            <input type="date" className="flex-1 md:w-auto p-2.5 rounded-xl border border-slate-200 text-sm font-black outline-none bg-white focus:ring-2 focus:ring-blue-100" value={filterDate} onChange={e => setFilterDate(e.target.value)} />
-                                            <button onClick={() => setFilterDate(new Date().toLocaleDateString('en-CA'))} className="px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black hover:bg-slate-100 transition active:scale-95 text-slate-600 shrink-0">วันนี้</button>
+                                        
+                                        {/* ตัวกรองช่วงวันที่ */}
+                                        <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-2.5 rounded-2xl border border-slate-200 w-full lg:w-auto">
+                                            <div className="flex items-center gap-1.5 flex-1 sm:flex-none">
+                                                <label className="text-[11px] font-black text-slate-500 uppercase shrink-0">เริ่ม</label>
+                                                <input type="date" className="p-2 rounded-xl border border-slate-200 text-xs font-black outline-none bg-white focus:ring-2 focus:ring-blue-100" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} />
+                                            </div>
+                                            <div className="flex items-center gap-1.5 flex-1 sm:flex-none">
+                                                <label className="text-[11px] font-black text-slate-500 uppercase shrink-0">ถึง</label>
+                                                <input type="date" className="p-2 rounded-xl border border-slate-200 text-xs font-black outline-none bg-white focus:ring-2 focus:ring-blue-100" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} />
+                                            </div>
+                                            
+                                            {/* ปุ่มเลือกด่วน */}
+                                            <div className="flex items-center gap-1 w-full sm:w-auto mt-1 sm:mt-0">
+                                                <button onClick={() => {
+                                                    const today = new Date().toLocaleDateString('en-CA');
+                                                    setFilterStartDate(today);
+                                                    setFilterEndDate(today);
+                                                }} className="flex-1 sm:flex-none px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-[11px] font-black hover:bg-slate-100 transition active:scale-95 text-slate-600">วันนี้</button>
+                                                
+                                                <button onClick={() => {
+                                                    const today = new Date().toLocaleDateString('en-CA');
+                                                    setFilterStartDate(today);
+                                                    setFilterEndDate(addDays(today, 7));
+                                                }} className="flex-1 sm:flex-none px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-[11px] font-black hover:bg-slate-100 transition active:scale-95 text-slate-600">+7 วัน</button>
+                                                
+                                                <button onClick={() => {
+                                                    const today = new Date().toLocaleDateString('en-CA');
+                                                    setFilterStartDate(today);
+                                                    setFilterEndDate(addDays(today, 30));
+                                                }} className="flex-1 sm:flex-none px-2.5 py-2 bg-white border border-slate-200 rounded-xl text-[11px] font-black hover:bg-slate-100 transition active:scale-95 text-slate-600">+30 วัน</button>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -678,6 +824,7 @@
                                             <thead className="text-xs text-slate-500 uppercase bg-slate-50">
                                                 <tr>
                                                     <th className="px-4 py-3 font-black rounded-tl-2xl">ลำดับ</th>
+                                                    <th className="px-4 py-3 font-black">วันที่นัด</th>
                                                     <th className="px-4 py-3 font-black">HN</th>
                                                     <th className="px-4 py-3 font-black">ชื่อ-สกุล</th>
                                                     <th className="px-4 py-3 font-black">ประเภทการนัด</th>
@@ -685,19 +832,23 @@
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {localAppointments.filter(a => a.date === filterDate).length === 0 ? (
+                                                {localAppointments.filter(a => a.date >= filterStartDate && a.date <= filterEndDate).length === 0 ? (
                                                     <tr>
-                                                        <td colSpan="5" className="px-4 py-12 text-center">
-                                                            <div className="text-slate-400 font-bold text-base mb-1">ไม่มีรายชื่อผู้ป่วยที่นัดในวันนี้</div>
-                                                            <div className="text-slate-300 text-xs font-medium">({formatThaiDate(filterDate, {day:'numeric', month:'long', year:'numeric'})})</div>
+                                                        <td colSpan="6" className="px-4 py-12 text-center">
+                                                            <div className="text-slate-400 font-bold text-base mb-1">ไม่มีรายชื่อผู้ป่วยที่นัดในช่วงเวลานี้</div>
+                                                            <div className="text-slate-300 text-xs font-medium">
+                                                                ({filterStartDate === filterEndDate ? formatThaiDate(filterStartDate, {day:'numeric', month:'long', year:'numeric'}) : `${formatThaiDate(filterStartDate, {day:'numeric', month:'short', year:'numeric'})} - ${formatThaiDate(filterEndDate, {day:'numeric', month:'short', year:'numeric'})}`})
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ) : (
                                                     localAppointments
-                                                        .filter(a => a.date === filterDate)
+                                                        .filter(a => a.date >= filterStartDate && a.date <= filterEndDate)
+                                                        .sort((a, b) => a.date.localeCompare(b.date))
                                                         .map((appt, idx) => (
                                                             <tr key={appt.id} className="border-b border-slate-100 hover:bg-slate-50/50">
                                                                 <td className="px-4 py-3 font-bold text-slate-500">{idx + 1}</td>
+                                                                <td className="px-4 py-3 font-black text-slate-700 whitespace-nowrap">{formatThaiDate(appt.date, { day: 'numeric', month: 'short', year: '2-digit' })}</td>
                                                                 <td className="px-4 py-3 font-black text-emerald-600">{appt.hn}</td>
                                                                 <td className="px-4 py-3 font-bold">{appt.name}</td>
                                                                 <td className="px-4 py-3 font-bold">
@@ -751,9 +902,19 @@
                                 <div className="lg:col-span-5 space-y-4 pb-20 print:hidden">
                                     
                                     {(selectedPatient || appointment.woundType || appointment.privilege || appointment.weight) && (
-                                        <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2 flex items-center gap-2">
-                                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse inline-block"></span>
-                                            <span className="text-xs font-black text-amber-700">บันทึก Draft อัตโนมัติแล้ว (ข้อมูลจะไม่หายถ้ารีเฟรช)</span>
+                                        <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2 flex items-center justify-between">
+                                            <div className="flex items-center gap-2">
+                                                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse inline-block"></span>
+                                                <span className="text-xs font-black text-amber-700">บันทึก Draft อัตโนมัติแล้ว</span>
+                                            </div>
+                                            {selectedPatient && (
+                                                <button 
+                                                    onClick={() => setShowHistoryModal(true)}
+                                                    className="bg-amber-200 hover:bg-amber-300 text-amber-900 text-[10px] font-black px-2.5 py-1 rounded-xl transition active:scale-95 flex items-center gap-1"
+                                                >
+                                                    📜 ประวัติเก่า ({patientHistory.length})
+                                                </button>
+                                            )}
                                         </div>
                                     )}
 
