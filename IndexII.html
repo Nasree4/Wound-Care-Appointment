@@ -3,13 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ระบบใบนัดโรงพยาบาลเจาะไอร้อง</title>
+    <title>ระบบใบนัดโรงพยาบาลเจาะไอร้อง (Firebase Edition)</title>
     
+    <!-- React 18 & Babel CDN -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone@7.23.9/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Firebase SDK (Compat 10.8.0) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+    
+    <!-- PapaParse for fast client-side CSV parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <!-- Typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     
     <style>
         body { font-family: 'Sarabun', sans-serif; }
@@ -86,7 +98,7 @@
     <div id="root"></div>
 
     <script type="text/babel" data-type="module">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
 
         const WOUND_TYPES = [
             "Laceration (แผลฉีกขาด)", "Abrasion (แผลถลอก)", "I&D (กรีดระบายหนอง)", 
@@ -109,7 +121,20 @@
             "เงินสด (Cash)", "อื่นๆ"
         ];
 
-        const DRAFT_KEY = 'woundcare_draft_v1';
+        const DRAFT_KEY = 'woundcare_draft_v2_firebase';
+        const FIREBASE_CONFIG_KEY = 'woundcare_firebase_config_v2';
+
+        // Firebase Configuration
+        const DEFAULT_FIREBASE_CONFIG = {
+            apiKey: "AIzaSyBuhfEu9UO9QFtSELoPuG5V2vbULOCggOM",
+            authDomain: "wound-care-appointment.firebaseapp.com",
+            databaseURL: "https://wound-care-appointment-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "wound-care-appointment",
+            storageBucket: "wound-care-appointment.firebasestorage.app",
+            messagingSenderId: "728038304492",
+            appId: "1:728038304492:web:9662b3d6bfeab6ed3e13c9",
+            measurementId: "G-EMY6R7Q84C"
+        };
 
         const addDays = (dateStr, n) => {
             if (!dateStr || !dateStr.includes('-')) return dateStr;
@@ -373,7 +398,7 @@
                         <div className="flex justify-between items-end text-[7.5px] pt-0.5 border-t border-black opacity-100 leading-none">
                             <div className="italic font-bold leading-tight space-y-0.5 text-black">
                                 <div className="text-black font-black">* กรุณานำใบนัดใบนี้มาด้วยทุกครั้งที่เข้ารับบริการ</div>
-                                <div className="text-black font-mono tracking-tighter uppercase text-[6.5px]">CHOAIRONG HOSPITAL | WOUNDCARE-V-ONLINE</div>
+                                <div className="text-black font-mono tracking-tighter uppercase text-[6.5px]">CHOAIRONG HOSPITAL | WOUNDCARE-FIREBASE-V1</div>
                             </div>
                             <div className="text-center min-w-[75px] text-black">
                                 <div className="font-black uppercase text-[8.5px] border-b-[1px] border-black pb-[1px] mb-[1px]">{safeStr(appt.staffName)}</div>
@@ -386,7 +411,7 @@
         };
 
         const App = () => {
-            const [mode, setMode] = useState('app'); 
+            const [mode, setMode] = useState('app'); // 'app' | 'list' | 'settings'
             const [searchHn, setSearchHn] = useState('');
             const [selectedPatient, setSelectedPatient] = useState(null);
             const [isManualEntry, setIsManualEntry] = useState(false);
@@ -394,41 +419,97 @@
             const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
             const [validationErrors, setValidationErrors] = useState([]);
 
-            // State สำหรับประวัติการนัดหมายย้อนหลังของคนไข้
+            // Firebase Config State
+            const [firebaseConfig, setFirebaseConfig] = useState(() => {
+                try {
+                    const saved = localStorage.getItem(FIREBASE_CONFIG_KEY);
+                    if (saved) return JSON.parse(saved);
+                } catch (e) {}
+                return DEFAULT_FIREBASE_CONFIG;
+            });
+            const [dbConnected, setDbConnected] = useState(false);
+            const [dbRef, setDbRef] = useState(null);
+
+            // Realtime Appointments & Patient History
+            const [realtimeRegistry, setRealtimeRegistry] = useState([]);
             const [patientHistory, setPatientHistory] = useState([]);
             const [showHistoryModal, setShowHistoryModal] = useState(false);
 
-            // State สำหรับเลือกช่วงวันที่ในหน้ารายชื่อนัด
+            // Filter for Registry page
             const [filterStartDate, setFilterStartDate] = useState(() => new Date().toLocaleDateString('en-CA'));
             const [filterEndDate, setFilterEndDate] = useState(() => new Date().toLocaleDateString('en-CA'));
-            const [localAppointments, setLocalAppointments] = useState(() => {
-                try { return JSON.parse(localStorage.getItem('woundcare_appointments_db') || '[]'); } 
-                catch (e) { return []; }
-            });
 
-            // ประวัติฉบับสมบูรณ์ที่บันทึกในเครื่อง
-            const [historyLogs, setHistoryLogs] = useState(() => {
-                try { return JSON.parse(localStorage.getItem('woundcare_history_logs') || '[]'); }
-                catch (e) { return []; }
-            });
+            // CSV Upload State
+            const [csvProgress, setCsvProgress] = useState({ active: false, current: 0, total: 0, percentage: 0 });
+            const fileInputRef = useRef(null);
 
-            const [sheetId, setSheetId] = useState('19T9hWcWuKN3ppXduyTsBhATN_a8GB5NSd3l_38s4AAE');
-            const [scriptUrl, setScriptUrl] = useState('https://script.google.com/macros/s/AKfycbwz2m0JbmzhgKFlWUxcaXVCNYfn8yYD-o7UNQS9PDT7aEuZXKxnr3UlQN4w6ovuizM/exec'); 
-
+            // Schedules
             const [dtSchedule, setDtSchedule] = useState('none'); 
             const [pcecSchedule, setPcecSchedule] = useState('none');
 
+            // Appointment Draft
             const [appointment, setAppointment] = useState(() => {
                 try {
                     const saved = localStorage.getItem(DRAFT_KEY);
-                    if (saved) {
-                        const parsed = JSON.parse(saved);
-                        return { ...defaultAppointment, ...parsed };
-                    }
-                } catch (e) { console.error(e) }
+                    if (saved) return { ...defaultAppointment, ...JSON.parse(saved) };
+                } catch (e) { console.error(e); }
                 return defaultAppointment;
             });
 
+            // Initialize Firebase App
+            useEffect(() => {
+                try {
+                    if (!firebase.apps.length) {
+                        if (firebaseConfig && (firebaseConfig.databaseURL || firebaseConfig.projectId)) {
+                            firebase.initializeApp(firebaseConfig);
+                        }
+                    } else {
+                        // Re-initialize if config changed
+                        const currentApp = firebase.app();
+                        if (currentApp.options.databaseURL !== firebaseConfig.databaseURL) {
+                            currentApp.delete().then(() => {
+                                firebase.initializeApp(firebaseConfig);
+                            });
+                        }
+                    }
+
+                    const db = firebase.database();
+                    setDbRef(db);
+
+                    // Connection State Monitor
+                    const connectedRef = db.ref('.info/connected');
+                    connectedRef.on('value', (snap) => {
+                        setDbConnected(snap.val() === true);
+                    });
+
+                    // Listen to /registry in real-time
+                    const registryRef = db.ref('registry');
+                    registryRef.on('value', (snapshot) => {
+                        const val = snapshot.val();
+                        if (val) {
+                            const list = Object.keys(val).map(key => ({
+                                id: key,
+                                ...val[key]
+                            }));
+                            setRealtimeRegistry(list);
+                        } else {
+                            setRealtimeRegistry([]);
+                        }
+                    }, (err) => {
+                        console.warn("Registry listener error:", err.message);
+                    });
+
+                    return () => {
+                        connectedRef.off();
+                        registryRef.off();
+                    };
+                } catch (err) {
+                    console.error("Firebase init error:", err);
+                    setDbConnected(false);
+                }
+            }, [firebaseConfig]);
+
+            // Save Draft to LocalStorage
             useEffect(() => {
                 try {
                     const { calculatedDates, ...rest } = appointment;
@@ -454,7 +535,6 @@
                             patient: selectedPatient,
                             wasManual: isManualEntry 
                         }));
-                        // เมื่อเปลี่ยนคนไข้ ให้โหลดประวัติของคนไข้คนนั้น
                         loadPatientHistory(selectedPatient.hn);
                     } else {
                         setPatientHistory([]);
@@ -474,11 +554,28 @@
                 } catch (e) {}
             };
 
-            // โหลดประวัติการนัดย้อนหลังเฉพาะ HN ที่เลือก
-            const loadPatientHistory = (hn) => {
-                if (!hn) return;
-                const filtered = historyLogs.filter(h => String(h.patient?.hn) === String(hn));
-                setPatientHistory(filtered);
+            // Load Patient Appointment History from Firebase
+            const loadPatientHistory = async (hn) => {
+                if (!hn || !dbRef) return;
+                try {
+                    const snap = await dbRef.ref('appointments')
+                        .orderByChild('patientHn')
+                        .equalTo(String(hn))
+                        .once('value');
+                    
+                    const data = snap.val();
+                    if (data) {
+                        const historyList = Object.keys(data).map(k => ({
+                            id: k,
+                            ...data[k]
+                        })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                        setPatientHistory(historyList);
+                    } else {
+                        setPatientHistory([]);
+                    }
+                } catch (e) {
+                    console.error("Load history error:", e);
+                }
             };
 
             const toggleManualEntry = () => {
@@ -487,6 +584,7 @@
                 setSelectedPatient(nextManualState ? { hn: searchHn, pname: '', fname: '', lname: '', privilege: '', cid: '', birthday: '' } : null);
             };
 
+            // Vaccine Calculation Engine
             useEffect(() => {
                 let dates = [];
                 const start = appointment.visitDate;
@@ -522,40 +620,35 @@
                 setAppointment(prev => ({ ...prev, calculatedDates: dates }));
             }, [appointment.visitDate, pcecSchedule, dtSchedule]);
 
+            // Search Patient in Firebase Realtime Database
             const handleSearch = async () => {
                 const trimmedHn = String(searchHn).trim();
                 if (!trimmedHn) return;
                 setLoading(true);
+
                 try {
-                    const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&sheet=patients`;
-                    const response = await fetch(url);
-                    if (!response.ok) throw new Error("Fetch failed");
-                    const csvText = await response.text();
-                    if (csvText.includes("<!DOCTYPE html>")) throw new Error("NOT_PUBLISHED");
-                    const lines = csvText.split('\n');
-                    const headers = lines[0].replace(/"/g, '').split(',');
-                    let found = null;
-                    for (let i = 1; i < lines.length; i++) {
-                        const cols = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(c => c.replace(/"/g, '').trim());
-                        const row = {};
-                        headers.forEach((h, idx) => row[h.trim().toLowerCase()] = cols[idx]);
-                        if (String(row.hn) === trimmedHn) {
-                            found = { hn: row.hn, pname: row.pname || '', fname: row.fname || '', lname: row.lname || '', cid: row.cid || '', birthday: row.birthday || '-' };
-                            break;
-                        }
-                    }
+                    if (!dbRef) throw new Error("ฐานข้อมูล Firebase ยังไม่พร้อมใช้งาน");
+                    
+                    const snapshot = await dbRef.ref(`patients/${trimmedHn}`).once('value');
+                    const found = snapshot.val();
+
                     if (found) {
                         setSelectedPatient(found);
                         setIsManualEntry(false);
                         loadPatientHistory(found.hn);
-                        showNotification("ค้นหาข้อมูลคนไข้สำเร็จ", "success");
-                    } else { showNotification("ไม่พบ HN นี้ในระบบ", "error"); }
-                } catch (err) { 
-                    const msg = err.message === "NOT_PUBLISHED" ? "โปรดตรวจสอบการ Publish CSV ใน Sheets" : "เชื่อมต่อ Google Sheets ไม่ได้";
-                    showNotification(msg, "error"); 
-                } finally { setLoading(false); }
+                        showNotification(`พบข้อมูลคนไข้: ${found.pname || ''}${found.fname} ${found.lname}`, "success");
+                    } else {
+                        showNotification(`ไม่พบ HN ${trimmedHn} ใน Firebase (สามารถกดกรอกข้อมูลเองได้)`, "error");
+                    }
+                } catch (err) {
+                    console.error("Search error:", err);
+                    showNotification(`ค้นหาไม่สำเร็จ: ${err.message}`, "error");
+                } finally {
+                    setLoading(false);
+                }
             };
 
+            // Save Appointment to Firebase Realtime Database
             const handleSave = async () => {
                 const errors = validateAppointment(selectedPatient, appointment);
                 if (errors.length > 0) {
@@ -565,10 +658,17 @@
 
                 setLoading(true);
                 try {
-                    const payload = {
+                    if (!dbRef) throw new Error("ไม่ได้เชื่อมต่อ Firebase Realtime Database");
+
+                    const newApptKey = dbRef.ref('appointments').push().key;
+                    const timestamp = Date.now();
+
+                    const appointmentData = {
+                        id: newApptKey,
                         visitDate: appointment.visitDate,
-                        patientHn: `'${String(selectedPatient.hn)}`,
-                        patientName: `${selectedPatient.pname}${selectedPatient.fname} ${selectedPatient.lname}`,
+                        patientHn: String(selectedPatient.hn),
+                        patientName: `${selectedPatient.pname || ''}${selectedPatient.fname} ${selectedPatient.lname}`,
+                        patientInfo: selectedPatient,
                         weight: appointment.weight,
                         privilege: appointment.privilege,
                         woundType: appointment.woundType,
@@ -576,79 +676,73 @@
                         stitchCount: appointment.stitchCount,
                         dressingFrequency: appointment.dressingFrequency,
                         stitchRemovalDate: appointment.stitchRemovalDate,
+                        calculatedDates: appointment.calculatedDates || [],
                         note: appointment.note,
                         staffName: appointment.staffName,
-                        createdAt: new Date().toLocaleString('th-TH')
+                        createdAt: timestamp,
+                        createdAtFormatted: new Date().toLocaleString('th-TH')
                     };
-                    
-                    const response = await fetch(scriptUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                        body: JSON.stringify(payload)
-                    });
 
-                    if (!response.ok) {
-                        throw new Error(`HTTP error: ${response.status}`);
-                    }
+                    const updates = {};
+                    // 1. บันทึกลง /appointments/{newApptKey}
+                    updates[`/appointments/${newApptKey}`] = appointmentData;
 
-                    let result = null;
-                    try { result = await response.json(); } catch (e) {}
-
-                    if (result && result.status === 'error') {
-                        throw new Error(result.message || 'Apps Script error');
-                    }
-
-                    // บันทึกลงใน History Logs ประวัติรวมในเครื่อง
-                    const newLogItem = {
-                        id: Date.now(),
-                        savedAt: new Date().toISOString(),
-                        patient: selectedPatient,
-                        appt: appointment
+                    // 2. ถ้าคนไข้ถูกกรอกใหม่หรือยังไม่มีใน /patients ให้อัปเดตข้อมูลคนไข้
+                    updates[`/patients/${String(selectedPatient.hn)}`] = {
+                        hn: String(selectedPatient.hn),
+                        pname: selectedPatient.pname || '',
+                        fname: selectedPatient.fname || '',
+                        lname: selectedPatient.lname || '',
+                        cid: selectedPatient.cid || '',
+                        birthday: selectedPatient.birthday || '-'
                     };
-                    const updatedLogs = [newLogItem, ...historyLogs];
-                    setHistoryLogs(updatedLogs);
-                    localStorage.setItem('woundcare_history_logs', JSON.stringify(updatedLogs));
-                    loadPatientHistory(selectedPatient.hn);
 
-                    // บันทึกนัดหมายในอนาคตลง localStorage สำหรับหน้ารายชื่อ
-                    const futureAppts = [];
+                    // 3. แตกรายการนัดหมายในอนาคตลง /registry
                     if (appointment.stitchRemovalDate) {
-                        futureAppts.push({
-                            id: Date.now() + Math.random(),
-                            hn: selectedPatient.hn,
-                            name: `${selectedPatient.pname}${selectedPatient.fname} ${selectedPatient.lname}`,
+                        const regKey = dbRef.ref('registry').push().key;
+                        updates[`/registry/${regKey}`] = {
+                            id: regKey,
+                            appointmentId: newApptKey,
+                            hn: String(selectedPatient.hn),
+                            name: `${selectedPatient.pname || ''}${selectedPatient.fname} ${selectedPatient.lname}`,
                             date: appointment.stitchRemovalDate,
                             type: 'ตัดไหม (Suture Removal)',
-                            createdAt: new Date().toISOString()
-                        });
+                            status: 'pending',
+                            createdAt: timestamp
+                        };
                     }
+
                     if (appointment.calculatedDates) {
                         appointment.calculatedDates.forEach(d => {
                             if (d.status === 'นัดหมาย') {
-                                futureAppts.push({
-                                    id: Date.now() + Math.random(),
-                                    hn: selectedPatient.hn,
-                                    name: `${selectedPatient.pname}${selectedPatient.fname} ${selectedPatient.lname}`,
+                                const regKey = dbRef.ref('registry').push().key;
+                                updates[`/registry/${regKey}`] = {
+                                    id: regKey,
+                                    appointmentId: newApptKey,
+                                    hn: String(selectedPatient.hn),
+                                    name: `${selectedPatient.pname || ''}${selectedPatient.fname} ${selectedPatient.lname}`,
                                     date: d.date,
                                     type: `ฉีดวัคซีน: ${d.label}`,
-                                    createdAt: new Date().toISOString()
-                                });
+                                    status: 'pending',
+                                    createdAt: timestamp
+                                };
                             }
                         });
                     }
-                    if (futureAppts.length > 0) {
-                        const updatedAppts = [...localAppointments, ...futureAppts];
-                        setLocalAppointments(updatedAppts);
-                        localStorage.setItem('woundcare_appointments_db', JSON.stringify(updatedAppts));
-                    }
 
-                    showNotification("บันทึกนัดหมายลง Google Sheets และเก็บประวัติสำเร็จ ✓", "success");
+                    // Execute Multi-path Real-time Update
+                    await dbRef.ref().update(updates);
+
+                    showNotification("บันทึกลง Firebase Realtime Database สำเร็จ ✓", "success");
+                    loadPatientHistory(selectedPatient.hn);
                     clearDraft();
 
-                } catch (err) { 
+                } catch (err) {
                     console.error('Save error:', err);
-                    showNotification(`บันทึกไม่สำเร็จ: ${err.message || 'ตรวจสอบการเชื่อมต่อ'}`, "error"); 
-                } finally { setLoading(false); }
+                    showNotification(`บันทึกไม่สำเร็จ: ${err.message}`, "error");
+                } finally {
+                    setLoading(false);
+                }
             };
 
             const handlePrint = () => {
@@ -669,19 +763,112 @@
                 setPcecSchedule('none');
                 setAppointment(defaultAppointment);
                 setPatientHistory([]);
-                showNotification("ล้างข้อมูลแล้ว พร้อมเริ่มใหม่", "success");
+                showNotification("ล้างข้อมูลเรียบร้อย พร้อมเริ่มรายการใหม่", "success");
             };
 
-            // โหลดใบนัดเก่าขึ้นมาแสดงในฟอร์มเพื่อพิมพ์ซ้ำ
             const restoreHistoryToForm = (log) => {
-                setSelectedPatient(log.patient);
-                setAppointment(log.appt);
+                if (log.patientInfo) {
+                    setSelectedPatient(log.patientInfo);
+                }
+                setAppointment({
+                    visitDate: log.visitDate || new Date().toLocaleDateString('en-CA'),
+                    weight: log.weight || '',
+                    privilege: log.privilege || '',
+                    woundType: log.woundType || '',
+                    woundLocation: log.woundLocation || '',
+                    stitchCount: log.stitchCount || '',
+                    dressingFrequency: log.dressingFrequency || 'ทุกวัน',
+                    stitchRemovalDate: log.stitchRemovalDate || '',
+                    note: log.note || '',
+                    staffName: log.staffName || 'เจ้าหน้าที่พยาบาล',
+                    calculatedDates: log.calculatedDates || []
+                });
                 setShowHistoryModal(false);
-                showNotification(`โหลดข้อมูลใบนัดวันที่ ${formatThaiDate(log.appt.visitDate)} เรียบร้อย`, "success");
+                showNotification(`โหลดข้อมูลใบนัดวันที่ ${formatThaiDate(log.visitDate)} เรียบร้อย`, "success");
+            };
+
+            // Delete item from Registry
+            const handleDeleteRegistryItem = async (id) => {
+                if (!dbRef || !id) return;
+                try {
+                    await dbRef.ref(`registry/${id}`).remove();
+                    showNotification("ลบรายการนัดหมายเรียบร้อย", "success");
+                } catch (e) {
+                    showNotification("ลบไม่สำเร็จ: " + e.message, "error");
+                }
+            };
+
+            // Batch CSV Import Handler
+            const handleCsvUpload = (event) => {
+                const file = event.target.files[0];
+                if (!file || !dbRef) return;
+
+                setCsvProgress({ active: true, current: 0, total: 0, percentage: 0 });
+
+                Papa.parse(file, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: async (results) => {
+                        const rows = results.data;
+                        const total = rows.length;
+                        const batchSize = 500;
+                        let processed = 0;
+
+                        try {
+                            for (let i = 0; i < total; i += batchSize) {
+                                const chunk = rows.slice(i, i + batchSize);
+                                const updates = {};
+                                
+                                chunk.forEach(row => {
+                                    const hn = String(row.hn || row.HN || '').trim();
+                                    if (hn) {
+                                        updates[`/patients/${hn}`] = {
+                                            hn: hn,
+                                            pname: row.pname || '',
+                                            fname: row.fname || '',
+                                            lname: row.lname || '',
+                                            cid: row.cid || '',
+                                            birthday: row.birthday || '-'
+                                        };
+                                    }
+                                });
+
+                                await dbRef.ref().update(updates);
+                                processed += chunk.length;
+                                const pct = Math.min(100, Math.round((processed / total) * 100));
+                                setCsvProgress({ active: true, current: processed, total, percentage: pct });
+                            }
+
+                            showNotification(`นำเข้าข้อมูลผู้ป่วยสำเร็จ ${processed} รายการ`, "success");
+                        } catch (err) {
+                            console.error("CSV Import error:", err);
+                            showNotification(`การนำเข้าข้อมูลล้มเหลว: ${err.message}`, "error");
+                        } finally {
+                            setTimeout(() => {
+                                setCsvProgress({ active: false, current: 0, total: 0, percentage: 0 });
+                                if (fileInputRef.current) fileInputRef.current.value = '';
+                            }, 1500);
+                        }
+                    },
+                    error: (error) => {
+                        showNotification(`อ่านไฟล์ CSV ไม่สำเร็จ: ${error.message}`, "error");
+                        setCsvProgress({ active: false, current: 0, total: 0, percentage: 0 });
+                    }
+                });
+            };
+
+            const handleSaveFirebaseConfig = () => {
+                try {
+                    localStorage.setItem(FIREBASE_CONFIG_KEY, JSON.stringify(firebaseConfig));
+                    showNotification("บันทึกการตั้งค่า Firebase เรียบร้อย กำลังเชื่อมต่อใหม่...", "success");
+                    setMode('app');
+                } catch (e) {
+                    showNotification("บันทึกไม่สำเร็จ", "error");
+                }
             };
 
             return (
-                <div className="min-h-screen relative">
+                <div className="min-h-screen relative pb-12">
                     <ValidationErrors errors={validationErrors} onDismiss={() => setValidationErrors([])} />
 
                     {/* Toast Notification */}
@@ -697,7 +884,7 @@
                         <div className="fixed inset-0 z-[150] bg-black/20 backdrop-blur-sm flex items-center justify-center">
                             <div className="bg-white rounded-3xl px-8 py-6 shadow-2xl flex items-center gap-4">
                                 <div className="w-6 h-6 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
-                                <span className="font-black text-slate-700">กำลังดำเนินการ...</span>
+                                <span className="font-black text-slate-700">กำลังดำเนินการเชื่อมต่อ Firebase...</span>
                             </div>
                         </div>
                     )}
@@ -709,7 +896,7 @@
                                 <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                                     <div>
                                         <h3 className="font-black text-slate-800 text-base flex items-center gap-2">
-                                            <span>📜</span> ประวัติการรับบริการย้อนหลัง
+                                            <span>📜</span> ประวัติการรับบริการย้อนหลัง (Firebase)
                                         </h3>
                                         <div className="text-xs font-bold text-slate-500 mt-0.5">
                                             HN: <span className="text-emerald-600 font-black">{selectedPatient?.hn}</span> - {selectedPatient?.pname}{selectedPatient?.fname} {selectedPatient?.lname}
@@ -721,7 +908,7 @@
                                 <div className="p-5 overflow-y-auto space-y-3 custom-scrollbar flex-1">
                                     {patientHistory.length === 0 ? (
                                         <div className="py-12 text-center text-slate-400 font-bold">
-                                            ไม่พบประวัติการทำใบนัดย้อนหลังของคนไข้รายนี้ในระบบ
+                                            ไม่พบประวัติการทำใบนัดย้อนหลังของคนไข้รายนี้ใน Firebase
                                         </div>
                                     ) : (
                                         patientHistory.map((item, idx) => (
@@ -729,22 +916,22 @@
                                                 <div className="space-y-1">
                                                     <div className="flex items-center gap-2">
                                                         <span className="bg-emerald-100 text-emerald-800 text-[11px] font-black px-2.5 py-0.5 rounded-lg">
-                                                            วันที่รับบริการ: {formatThaiDate(item.appt?.visitDate, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                            วันที่รับบริการ: {formatThaiDate(item.visitDate, { day: 'numeric', month: 'short', year: 'numeric' })}
                                                         </span>
                                                         <span className="text-[10px] text-slate-400 font-bold">
-                                                            (บันทึกเมื่อ: {new Date(item.savedAt).toLocaleDateString('th-TH')})
+                                                            (บันทึกเมื่อ: {item.createdAtFormatted || new Date(item.createdAt).toLocaleDateString('th-TH')})
                                                         </span>
                                                     </div>
                                                     <div className="text-xs text-slate-700 font-bold space-x-2">
-                                                        <span><strong>แผล:</strong> {item.appt?.woundType || '-'}</span>
+                                                        <span><strong>แผล:</strong> {item.woundType || '-'}</span>
                                                         <span>•</span>
-                                                        <span><strong>ตำแหน่ง:</strong> {item.appt?.woundLocation || '-'}</span>
+                                                        <span><strong>ตำแหน่ง:</strong> {item.woundLocation || '-'}</span>
                                                         <span>•</span>
-                                                        <span><strong>ทำแผล:</strong> {item.appt?.dressingFrequency}</span>
+                                                        <span><strong>ทำแผล:</strong> {item.dressingFrequency}</span>
                                                     </div>
-                                                    {item.appt?.stitchRemovalDate && (
+                                                    {item.stitchRemovalDate && (
                                                         <div className="text-xs text-blue-600 font-bold">
-                                                            ✂️ กำหนดตัดไหม: {formatThaiDate(item.appt?.stitchRemovalDate)}
+                                                            ✂️ กำหนดตัดไหม: {formatThaiDate(item.stitchRemovalDate)}
                                                         </div>
                                                     )}
                                                 </div>
@@ -766,30 +953,59 @@
                     )}
 
                     <div className="p-2 md:p-6 max-w-7xl mx-auto">
+                        {/* Header Bar */}
                         <header className="print:hidden mb-4 flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-3xl shadow-sm border border-slate-200 gap-4">
                             <div className="flex items-center gap-3">
-                                <div className="bg-emerald-600 p-2.5 rounded-2xl text-white shadow-lg font-black uppercase tracking-widest">W</div>
+                                <div className="bg-emerald-600 p-2.5 rounded-2xl text-white shadow-lg font-black uppercase tracking-widest flex items-center justify-center w-10 h-10">
+                                    W
+                                </div>
                                 <div>
-                                    <h1 className="text-xl font-black text-slate-800 leading-none tracking-tight">ใบนัดรับบริการทางการแพทย์</h1>
-                                    <div className="text-[11px] text-slate-500 font-bold uppercase mt-1 tracking-wider">Hospital Appointment Card</div>
+                                    <div className="flex items-center gap-2">
+                                        <h1 className="text-xl font-black text-slate-800 leading-none tracking-tight">ใบนัดรับบริการทางการแพทย์</h1>
+                                        <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase flex items-center gap-1 ${dbConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                            <span className={`w-1.5 h-1.5 rounded-full ${dbConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+                                            {dbConnected ? 'Firebase Live' : 'Offline / Check Config'}
+                                        </span>
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 font-bold uppercase mt-1 tracking-wider">Hospital Appointment Card (Firebase Edition)</div>
                                 </div>
                             </div>
                             <div className="flex flex-wrap md:flex-nowrap gap-2 w-full md:w-auto">
-                                <button onClick={() => setMode(mode === 'list' ? 'app' : 'list')} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-blue-50 text-blue-600 px-4 py-2.5 rounded-2xl font-black hover:bg-blue-100 transition active:scale-95 border border-blue-200 uppercase text-xs">📅 รายชื่อนัด</button>
-                                <button onClick={handleClearDraft} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-rose-50 text-rose-500 px-4 py-2.5 rounded-2xl font-black hover:bg-rose-100 transition active:scale-95 border border-rose-200 uppercase text-xs">Clear</button>
-                                <button onClick={() => setMode(mode === 'settings' ? 'app' : 'settings')} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-50 text-slate-600 px-4 py-2.5 rounded-2xl font-black hover:bg-slate-100 transition active:scale-95 border border-slate-200 uppercase text-xs">Settings</button>
-                                {mode === 'app' && <button onClick={handleSave} disabled={loading} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-2xl font-black hover:bg-emerald-700 disabled:bg-slate-200 transition shadow-md active:scale-95 uppercase text-xs">Save</button>}
-                                {mode === 'app' && <button onClick={handlePrint} disabled={loading} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-900 text-white px-6 py-2.5 rounded-2xl font-black hover:bg-slate-800 disabled:bg-slate-200 transition shadow-md active:scale-95 uppercase text-xs">Print</button>}
+                                <button onClick={() => setMode(mode === 'list' ? 'app' : 'list')} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl font-black transition active:scale-95 border uppercase text-xs ${mode === 'list' ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-200'}`}>
+                                    📅 รายชื่อนัด ({realtimeRegistry.length})
+                                </button>
+                                <button onClick={handleClearDraft} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-rose-50 text-rose-500 px-4 py-2.5 rounded-2xl font-black hover:bg-rose-100 transition active:scale-95 border border-rose-200 uppercase text-xs">
+                                    Clear
+                                </button>
+                                <button onClick={() => setMode(mode === 'settings' ? 'app' : 'settings')} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl font-black transition active:scale-95 border uppercase text-xs ${mode === 'settings' ? 'bg-slate-800 text-white border-slate-800 shadow-md' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'}`}>
+                                    ⚙️ Settings
+                                </button>
+                                {mode === 'app' && (
+                                    <>
+                                        <button onClick={handleSave} disabled={loading} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-2xl font-black hover:bg-emerald-700 disabled:bg-slate-200 transition shadow-md active:scale-95 uppercase text-xs">
+                                            Save to DB
+                                        </button>
+                                        <button onClick={handlePrint} disabled={loading} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-900 text-white px-6 py-2.5 rounded-2xl font-black hover:bg-slate-800 disabled:bg-slate-200 transition shadow-md active:scale-95 uppercase text-xs">
+                                            Print
+                                        </button>
+                                    </>
+                                )}
                             </div>
                         </header>
 
+                        {/* MODE: รายชื่อผู้ป่วยนัดหมาย (Real-time Registry) */}
                         {mode === 'list' ? (
                             <div className="print:hidden max-w-5xl mx-auto animate-in fade-in duration-300 pb-20">
                                 <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-200 shadow-sm">
                                     <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 gap-4">
-                                        <h2 className="text-lg font-black text-slate-800 uppercase tracking-wide flex items-center gap-2">
-                                            <span className="text-2xl">📅</span> รายชื่อผู้ป่วยนัดหมาย
-                                        </h2>
+                                        <div>
+                                            <h2 className="text-lg font-black text-slate-800 uppercase tracking-wide flex items-center gap-2">
+                                                <span className="text-2xl">📅</span> รายชื่อผู้ป่วยนัดหมาย (Real-time Sync)
+                                            </h2>
+                                            <div className="text-xs text-slate-500 font-bold mt-0.5">
+                                                ซิงก์ข้อมูลอัตโนมัติจาก Firebase Realtime Database ข้ามทุกเครื่องในเครือข่าย
+                                            </div>
+                                        </div>
                                         
                                         {/* ตัวกรองช่วงวันที่ */}
                                         <div className="flex flex-wrap items-center gap-2 bg-slate-50 p-2.5 rounded-2xl border border-slate-200 w-full lg:w-auto">
@@ -838,7 +1054,7 @@
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {localAppointments.filter(a => a.date >= filterStartDate && a.date <= filterEndDate).length === 0 ? (
+                                                {realtimeRegistry.filter(a => a.date >= filterStartDate && a.date <= filterEndDate).length === 0 ? (
                                                     <tr>
                                                         <td colSpan="6" className="px-4 py-12 text-center">
                                                             <div className="text-slate-400 font-bold text-base mb-1">ไม่มีรายชื่อผู้ป่วยที่นัดในช่วงเวลานี้</div>
@@ -848,11 +1064,11 @@
                                                         </td>
                                                     </tr>
                                                 ) : (
-                                                    localAppointments
+                                                    realtimeRegistry
                                                         .filter(a => a.date >= filterStartDate && a.date <= filterEndDate)
                                                         .sort((a, b) => a.date.localeCompare(b.date))
                                                         .map((appt, idx) => (
-                                                            <tr key={appt.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                                                            <tr key={appt.id || idx} className="border-b border-slate-100 hover:bg-slate-50/50">
                                                                 <td className="px-4 py-3 font-bold text-slate-500">{idx + 1}</td>
                                                                 <td className="px-4 py-3 font-black text-slate-700 whitespace-nowrap">{formatThaiDate(appt.date, { day: 'numeric', month: 'short', year: '2-digit' })}</td>
                                                                 <td className="px-4 py-3 font-black text-emerald-600">{appt.hn}</td>
@@ -863,11 +1079,7 @@
                                                                     </span>
                                                                 </td>
                                                                 <td className="px-4 py-3 text-center">
-                                                                    <button onClick={() => {
-                                                                        const updated = localAppointments.filter(a => a.id !== appt.id);
-                                                                        setLocalAppointments(updated);
-                                                                        localStorage.setItem('woundcare_appointments_db', JSON.stringify(updated));
-                                                                    }} className="text-rose-400 hover:text-rose-600 font-black text-xs px-2 py-1 bg-rose-50 hover:bg-rose-100 rounded-lg transition active:scale-95">ลบ</button>
+                                                                    <button onClick={() => handleDeleteRegistryItem(appt.id)} className="text-rose-400 hover:text-rose-600 font-black text-xs px-2.5 py-1 bg-rose-50 hover:bg-rose-100 rounded-lg transition active:scale-95">ลบ</button>
                                                                 </td>
                                                             </tr>
                                                         ))
@@ -875,35 +1087,124 @@
                                             </tbody>
                                         </table>
                                     </div>
-                                    <div className="mt-4 text-[10px] text-slate-400 font-bold text-right border-t border-slate-100 pt-3">
-                                        * ข้อมูลรายชื่อนัดหมายถูกดึงและบันทึกจากประวัติการกด Save ในบราวเซอร์เครื่องนี้เท่านั้น
-                                    </div>
                                 </div>
                             </div>
                         ) : mode === 'settings' ? (
-                            <div className="print:hidden max-w-xl mx-auto py-8 animate-in fade-in duration-300">
+                            /* MODE: Settings & Firebase Configuration */
+                            <div className="print:hidden max-w-3xl mx-auto py-4 animate-in fade-in duration-300 space-y-6">
                                 <div className="bg-white p-8 rounded-[40px] border border-slate-200 shadow-xl space-y-6 relative overflow-hidden">
-                                    <div className="absolute top-0 left-0 w-full h-2 bg-slate-800"></div>
-                                    <h1 className="text-xl font-black text-slate-800 uppercase tracking-widest text-center">Settings & Configuration</h1>
-                                    
-                                    <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl text-sm text-amber-800">
-                                        <strong>⚠️ คำเตือนเรื่อง PDPA:</strong> การดึงข้อมูล HN และชื่อคนไข้ผ่าน Google Sheets ที่แชร์แบบ Public อาจทำให้ข้อมูลส่วนบุคคลรั่วไหล แนะนำให้ใช้สำหรับทดสอบเท่านั้น หากใช้จริงควรปรับเป็น API ที่มีการยืนยันตัวตน (Authentication)
+                                    <div className="absolute top-0 left-0 w-full h-2 bg-emerald-600"></div>
+                                    <div className="flex justify-between items-center">
+                                        <h1 className="text-xl font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                                            <span>🔥</span> Firebase Configuration & Tools
+                                        </h1>
+                                        <span className={`px-3 py-1 rounded-full text-xs font-black uppercase ${dbConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                                            {dbConnected ? 'Connected 🟢' : 'Disconnected 🔴'}
+                                        </span>
                                     </div>
 
-                                    <div className="space-y-4">
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase ml-3">Google Sheet ID (สำหรับดึงข้อมูลคนไข้)</label>
-                                            <input className="w-full p-4 rounded-2xl border border-slate-200 font-mono text-xs focus:ring-4 focus:ring-emerald-500/10 outline-none" value={sheetId} onChange={e => setSheetId(e.target.value)} />
+                                    {/* CSV Importer Section */}
+                                    <div className="bg-emerald-50/60 border border-emerald-200 p-5 rounded-3xl space-y-3">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <h3 className="font-black text-emerald-900 text-sm flex items-center gap-2">
+                                                    <span>📥</span> นำเข้าฐานข้อมูลคนไข้ (CSV Importer)
+                                                </h3>
+                                                <p className="text-xs font-bold text-emerald-700 mt-1">
+                                                    อัปโหลดไฟล์ `รายชื่อ - patients.csv` เพื่อบันทึกรายชื่อคนไข้ทั้งหมดลงใน Firebase `/patients`
+                                                </p>
+                                            </div>
                                         </div>
-                                        <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase ml-3">Apps Script Web App URL (สำหรับบันทึกข้อมูล)</label>
-                                            <input className="w-full p-4 rounded-2xl border border-slate-200 font-mono text-xs focus:ring-4 focus:ring-emerald-500/10 outline-none" value={scriptUrl} onChange={e => setScriptUrl(e.target.value)} />
+
+                                        <div className="flex flex-col sm:flex-row gap-3 items-center">
+                                            <input 
+                                                type="file" 
+                                                accept=".csv" 
+                                                ref={fileInputRef} 
+                                                onChange={handleCsvUpload} 
+                                                disabled={csvProgress.active}
+                                                className="block w-full text-xs text-slate-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-emerald-600 file:text-white hover:file:bg-emerald-700 cursor-pointer"
+                                            />
                                         </div>
-                                        <button onClick={() => setMode('app')} className="w-full bg-slate-900 text-white py-4 rounded-3xl font-black shadow-lg uppercase active:scale-95 transition-all text-sm tracking-widest mt-4">Go Back to App</button>
+
+                                        {csvProgress.active && (
+                                            <div className="space-y-1.5 pt-2">
+                                                <div className="flex justify-between text-xs font-black text-emerald-800">
+                                                    <span>กำลังนำเข้าข้อมูล... ({csvProgress.current} / {csvProgress.total})</span>
+                                                    <span>{csvProgress.percentage}%</span>
+                                                </div>
+                                                <div className="w-full bg-emerald-200 rounded-full h-2.5 overflow-hidden">
+                                                    <div className="bg-emerald-600 h-2.5 rounded-full transition-all duration-300" style={{ width: `${csvProgress.percentage}%` }}></div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Firebase Config Fields */}
+                                    <div className="space-y-4 pt-2">
+                                        <h3 className="font-black text-slate-800 text-sm uppercase tracking-wider">ตั้งค่าการเชื่อมต่อ Realtime Database</h3>
+                                        
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase ml-3">Database URL (จำเป็นต้องมี)</label>
+                                            <input className="w-full p-3.5 rounded-2xl border border-slate-200 font-mono text-xs focus:ring-4 focus:ring-emerald-500/10 outline-none" value={firebaseConfig.databaseURL || ''} onChange={e => setFirebaseConfig({...firebaseConfig, databaseURL: e.target.value})} placeholder="https://your-project-default-rtdb.firebaseio.com" />
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase ml-3">Project ID</label>
+                                                <input className="w-full p-3.5 rounded-2xl border border-slate-200 font-mono text-xs focus:ring-4 focus:ring-emerald-500/10 outline-none" value={firebaseConfig.projectId || ''} onChange={e => setFirebaseConfig({...firebaseConfig, projectId: e.target.value})} placeholder="woundcare-appointment" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase ml-3">API Key</label>
+                                                <input className="w-full p-3.5 rounded-2xl border border-slate-200 font-mono text-xs focus:ring-4 focus:ring-emerald-500/10 outline-none" value={firebaseConfig.apiKey || ''} onChange={e => setFirebaseConfig({...firebaseConfig, apiKey: e.target.value})} placeholder="AIzaSy..." />
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase ml-3">Auth Domain</label>
+                                                <input className="w-full p-3.5 rounded-2xl border border-slate-200 font-mono text-xs focus:ring-4 focus:ring-emerald-500/10 outline-none" value={firebaseConfig.authDomain || ''} onChange={e => setFirebaseConfig({...firebaseConfig, authDomain: e.target.value})} placeholder="project.firebaseapp.com" />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase ml-3">App ID</label>
+                                                <input className="w-full p-3.5 rounded-2xl border border-slate-200 font-mono text-xs focus:ring-4 focus:ring-emerald-500/10 outline-none" value={firebaseConfig.appId || ''} onChange={e => setFirebaseConfig({...firebaseConfig, appId: e.target.value})} placeholder="1:12345:web:6789" />
+                                            </div>
+                                        </div>
+
+                                        <div className="flex gap-3 pt-2">
+                                            <button onClick={handleSaveFirebaseConfig} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 rounded-2xl font-black shadow-lg uppercase active:scale-95 transition-all text-xs tracking-wider">
+                                                💾 บันทึกการตั้งค่า Firebase
+                                            </button>
+                                            <button onClick={() => setMode('app')} className="px-6 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3.5 rounded-2xl font-black uppercase active:scale-95 transition-all text-xs tracking-wider">
+                                                กลับสู่หน้าหลัก
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Security Rules Helper */}
+                                    <div className="bg-slate-50 p-4 rounded-3xl border border-slate-200 text-xs space-y-2">
+                                        <div className="font-black text-slate-700 flex items-center justify-between">
+                                            <span>🛡️ ตัวอย่าง Firebase Security Rules (database.rules.json):</span>
+                                        </div>
+                                        <pre className="bg-slate-900 text-emerald-400 p-3 rounded-2xl font-mono text-[11px] overflow-x-auto">
+{`{
+  "rules": {
+    ".read": true,
+    ".write": true,
+    "appointments": {
+      ".indexOn": ["patientHn", "visitDate"]
+    },
+    "registry": {
+      ".indexOn": ["date", "hn"]
+    }
+  }
+}`}
+                                        </pre>
                                     </div>
                                 </div>
                             </div>
                         ) : (
+                            /* MODE: ฟอร์มสร้างใบนัดและพิมพ์ (Main Form) */
                             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                                 <div className="lg:col-span-5 space-y-4 pb-20 print:hidden">
                                     
@@ -911,7 +1212,7 @@
                                         <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-2 flex items-center justify-between">
                                             <div className="flex items-center gap-2">
                                                 <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse inline-block"></span>
-                                                <span className="text-xs font-black text-amber-700">บันทึก Draft อัตโนมัติแล้ว</span>
+                                                <span className="text-xs font-black text-amber-700">บันทึก Draft อัตโนมัติในเครื่องแล้ว</span>
                                             </div>
                                             {selectedPatient && (
                                                 <button 
@@ -924,6 +1225,7 @@
                                         </div>
                                     )}
 
+                                    {/* Patient Info Card */}
                                     <div className="bg-white p-5 rounded-[2.5rem] border border-slate-200 shadow-sm transition-all hover:shadow-md">
                                         <div className="flex justify-between items-center mb-4 px-2">
                                             <h2 className="text-xs flex items-center gap-2 text-emerald-700 uppercase tracking-widest font-black">PATIENT INFO</h2>
@@ -934,7 +1236,7 @@
                                         
                                         {!isManualEntry ? (
                                             <div className="flex gap-2 mb-4">
-                                                <input type="text" placeholder="ระบุ HN..." className="flex-1 p-3.5 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-emerald-100 outline-none text-sm font-black bg-slate-50 transition-all placeholder:text-slate-400" value={searchHn} onChange={e => setSearchHn(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSearch()} />
+                                                <input type="text" placeholder="ระบุ HN เพื่อค้นหาใน Firebase..." className="flex-1 p-3.5 rounded-2xl border border-slate-200 focus:ring-4 focus:ring-emerald-100 outline-none text-sm font-black bg-slate-50 transition-all placeholder:text-slate-400" value={searchHn} onChange={e => setSearchHn(e.target.value)} onKeyPress={e => e.key === 'Enter' && handleSearch()} />
                                                 <button onClick={handleSearch} disabled={loading} className="bg-emerald-600 hover:bg-emerald-700 text-white px-6 rounded-2xl transition active:scale-95 shadow-lg shadow-emerald-100 disabled:bg-slate-300 font-black uppercase tracking-tighter">SEARCH</button>
                                             </div>
                                         ) : (
@@ -972,6 +1274,7 @@
                                         </div>
                                     </div>
                                     
+                                    {/* Treatment Plan Card */}
                                     <div className="bg-white p-5 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-4 transition-all hover:shadow-md">
                                         <h2 className="text-xs text-emerald-700 uppercase tracking-widest font-black">TREATMENT PLAN</h2>
                                         <div className="grid grid-cols-2 gap-3">
@@ -1009,6 +1312,7 @@
                                         </div>
                                     </div>
                                     
+                                    {/* Vaccines Schedule Card */}
                                     <div className="bg-white p-5 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-3 transition-all hover:shadow-md">
                                         <h2 className="text-xs text-emerald-700 uppercase tracking-widest font-black">VACCINES SCHEDULE</h2>
                                         <select className="w-full p-4 rounded-2xl border border-slate-200 text-xs font-black bg-white outline-none shadow-sm focus:ring-4 focus:ring-blue-100 transition-all" value={dtSchedule} onChange={e => setDtSchedule(e.target.value)}>
@@ -1034,6 +1338,7 @@
                                     </div>
                                 </div>
                                 
+                                {/* Right Preview / Print Area */}
                                 <div className="lg:col-span-7 flex justify-center items-start overflow-auto pb-20 pt-4 lg:pt-0">
                                     <AppointmentCard patient={selectedPatient} appt={appointment} />
                                 </div>
