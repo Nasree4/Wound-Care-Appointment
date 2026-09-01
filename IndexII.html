@@ -26,11 +26,11 @@
     <style>
         body { font-family: 'Sarabun', sans-serif; }
         .logo-bw {
-            filter: grayscale(100%) brightness(60%) contrast(2000%);
-            -webkit-filter: grayscale(100%) brightness(60%) contrast(2000%);
+            filter: grayscale(100%) contrast(160%) brightness(80%);
+            -webkit-filter: grayscale(100%) contrast(160%) brightness(80%);
         }
         
-        /* ตั้งค่าสำหรับการพิมพ์ A6 ให้พอดี 1 หน้าพอดี */
+        /* ตั้งค่าสำหรับการพิมพ์ A6 ให้พอดี 1 หน้าพอดี ไม่ขาดขอบล่าง */
         @media print {
             html, body {
                 width: 105mm !important;
@@ -49,14 +49,14 @@
             }
             @page { 
                 size: 105mm 148mm portrait; 
-                margin: 0; 
+                margin: 0mm; 
             }
             .print-area { 
                 width: 105mm !important; 
-                height: 148mm !important; 
-                max-height: 148mm !important;
+                height: 143mm !important; 
+                max-height: 143mm !important; 
                 border: none !important; 
-                padding: 3.5mm 4mm !important; 
+                padding: 2.5mm 4mm 5.5mm 4mm !important; 
                 margin: 0 !important; 
                 box-sizing: border-box !important; 
                 box-shadow: none !important; 
@@ -66,6 +66,7 @@
                 visibility: visible !important; 
                 display: flex !important;
                 flex-direction: column !important;
+                justify-content: space-between !important;
                 color: #000000 !important;
                 background: white !important;
                 page-break-after: avoid !important;
@@ -74,7 +75,7 @@
                 break-inside: avoid !important;
                 overflow: hidden !important;
             }
-            img.header-logo { max-height: 38px !important; }
+            img.header-logo { max-height: 46px !important; height: 42px !important; }
             .watermark { opacity: 0.18 !important; }
             .print-area * {
                 color: #000000 !important;
@@ -90,6 +91,8 @@
             .print-area {
                 width: 105mm;
                 height: 148mm;
+                max-height: 148mm;
+                padding: 2.5mm 4mm 5.5mm 4mm;
             }
         }
     </style>
@@ -278,16 +281,16 @@
                     <div>
                         <div className="w-full flex justify-between items-center mb-1 relative z-10">
                             <div className="w-7/12 text-left pr-1 space-y-0.5">
-                                <h2 className="text-[12px] font-black uppercase leading-none tracking-tighter text-black">ใบนัดรับบริการทางการแพทย์</h2>
+                                <h2 className="text-[12.5px] font-black uppercase leading-none tracking-tighter text-black">ใบนัดรับบริการทางการแพทย์</h2>
                                 <div className="text-[7.5px] text-black font-bold uppercase tracking-tight opacity-90">Hospital Appointment Card</div>
-                                <div className="text-[7.5px] text-black font-bold leading-none">โรงพยาบาลเจาะไอร้อง จ.นราธิวาส</div>
+                                <div className="text-[8px] text-black font-extrabold leading-none">โรงพยาบาลเจาะไอร้อง จ.นราธิวาส</div>
                             </div>
-                            <div className="w-5/12 flex justify-end">
-                                <img src="https://img2.pic.in.th/1245bce0a0bc0e53aa53.png" alt="Hospital Logo" className="header-logo max-h-[38px] object-contain mix-blend-multiply logo-bw" onError={(e) => e.target.style.display = 'none'} />
+                            <div className="w-5/12 flex justify-end items-center">
+                                <img src="https://img2.pic.in.th/1245bce0a0bc0e53aa53.png" alt="Hospital Logo" className="header-logo max-h-[56px] h-[52px] object-contain mix-blend-multiply logo-bw" onError={(e) => e.target.style.display = 'none'} />
                             </div>
                         </div>
 
-                        <div className={`${isWoundCareOnly ? 'space-y-1 mb-2' : 'space-y-0.5 mb-1'} relative z-10 text-black`}>
+                        <div className={`${isWoundCareOnly ? 'space-y-0.5 mb-1.5' : 'space-y-0.5 mb-1'} relative z-10 text-black`}>
                             <div className="flex justify-between items-end border-b border-dotted border-black pb-0.5 gap-1">
                                 <div className="flex items-baseline flex-1 min-w-0">
                                     <strong className="text-[10.5px] shrink-0 mr-1 font-bold">ชื่อ-สกุล:</strong> 
@@ -329,38 +332,38 @@
 
                         {/* แผนการรักษา (Wound Care) - ปรับดีไซน์ใหม่แบบโมเดิร์น ไร้ตารางแบบเดิม */}
                         {isWoundCareOnly ? (
-                            <div className="mb-2.5 mt-1 border-[1.2px] border-black rounded-lg p-2 bg-white relative z-10 text-black">
-                                <div className="flex items-center justify-between border-b border-black pb-1 mb-1.5">
-                                    <div className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5 text-black">
-                                        <span className="w-2 h-2 rounded-full bg-black inline-block"></span>
+                            <div className="mb-1.5 mt-0.5 border-[1.2px] border-black rounded-lg p-1.5 bg-white relative z-10 text-black">
+                                <div className="flex items-center justify-between border-b border-black pb-0.5 mb-1">
+                                    <div className="text-[10.5px] font-black uppercase tracking-wider flex items-center gap-1.5 text-black">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-black inline-block"></span>
                                         แผนการรักษา (Wound Care Plan)
                                     </div>
-                                    <div className="text-[9.5px] font-black text-black border border-black px-2 py-0.5 rounded-full bg-gray-50">
+                                    <div className="text-[9px] font-black text-black border border-black px-1.5 py-0.5 rounded-full bg-gray-50">
                                         {appt.stitchCount ? `เย็บ ${appt.stitchCount} เข็ม` : 'ไม่ได้เย็บแผล'}
                                     </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-2 gap-1.5">
                                     {/* กล่องลักษณะและตำแหน่งแผล */}
-                                    <div className="bg-gray-50 border border-black/70 rounded-md p-1.5 space-y-1">
-                                        <div className="text-[9px] font-bold uppercase text-gray-700 tracking-tight">ลักษณะ & ตำแหน่งบาดแผล</div>
-                                        <div className="text-[12.5px] font-black leading-tight text-black">
+                                    <div className="bg-gray-50 border border-black/70 rounded-md p-1.5 space-y-0.5">
+                                        <div className="text-[8.5px] font-bold uppercase text-gray-700 tracking-tight">ลักษณะ & ตำแหน่งบาดแผล</div>
+                                        <div className="text-[12px] font-black leading-tight text-black">
                                             {appt.woundType ? safeStr(appt.woundType.split(' ')[0]) : '-'}
                                         </div>
-                                        <div className="text-[10.5px] font-bold text-gray-800">
+                                        <div className="text-[10px] font-bold text-gray-800">
                                             ตำแหน่ง: <span className="font-black text-black">{appt.woundLocation ? safeStr(appt.woundLocation) : '-'}</span>
                                         </div>
                                     </div>
 
                                     {/* กล่องคำแนะนำการทำแผล */}
-                                    <div className="bg-gray-50 border border-black/70 rounded-md p-1.5 space-y-1 flex flex-col justify-between">
+                                    <div className="bg-gray-50 border border-black/70 rounded-md p-1.5 space-y-0.5 flex flex-col justify-between">
                                         <div>
-                                            <div className="text-[9px] font-bold uppercase text-gray-700 tracking-tight">ความถี่การล้างทำแผล</div>
-                                            <div className="text-[13.5px] font-black text-black mt-0.5">
+                                            <div className="text-[8.5px] font-bold uppercase text-gray-700 tracking-tight">ความถี่การล้างทำแผล</div>
+                                            <div className="text-[13px] font-black text-black mt-0.5">
                                                 <span className="underline decoration-2 underline-offset-2">{safeStr(appt.dressingFrequency)}</span>
                                             </div>
                                         </div>
-                                        <div className="text-[8px] font-bold text-gray-600 italic">
+                                        <div className="text-[7.5px] font-bold text-gray-600 italic">
                                             * ระวังอย่าให้แผลเปียกน้ำ
                                         </div>
                                     </div>
@@ -417,26 +420,26 @@
                         ))}
 
                         {appt.stitchRemovalDate && (
-                            <div className={`border-[1.5px] border-black ${isWoundCareOnly ? 'p-2 mb-2 mt-1' : 'p-0.5 mb-1'} text-center rounded-[6px] bg-gray-50 print:bg-transparent shadow-sm border-dashed relative z-10`}>
-                                <div className={`${isWoundCareOnly ? 'text-[10.5px] mb-1' : 'text-[8.5px] mb-[1px]'} font-black uppercase text-black flex items-center justify-center gap-1 leading-none`}>
+                            <div className={`border-[1.5px] border-black ${isWoundCareOnly ? 'p-1.5 mb-1 mt-0.5' : 'p-0.5 mb-1'} text-center rounded-[6px] bg-gray-50 print:bg-transparent shadow-sm border-dashed relative z-10`}>
+                                <div className={`${isWoundCareOnly ? 'text-[10px] mb-0.5' : 'text-[8.5px] mb-[1px]'} font-black uppercase text-black flex items-center justify-center gap-1 leading-none`}>
                                     กำหนดนัดตัดไหม (Stitches Off)
                                 </div>
-                                <div className={`${isWoundCareOnly ? 'text-[16px]' : 'text-[13px]'} font-black text-black underline decoration-double underline-offset-2 tracking-tight`}>
+                                <div className={`${isWoundCareOnly ? 'text-[15px]' : 'text-[13px]'} font-black text-black underline decoration-double underline-offset-1 tracking-tight`}>
                                     {formatThaiDate(appt.stitchRemovalDate, { day: 'numeric', month: 'long', year: 'numeric' })}
                                 </div>
                             </div>
                         )}
 
                         {appt.note && (
-                            <div className={`${isWoundCareOnly ? 'mb-2 mt-1 text-[10px] pl-2 border-l-2' : 'mb-1 mt-0.5 text-[8.5px] pl-1.5 border-l-[1.5px]'} relative z-10 text-black leading-tight border-black`}>
+                            <div className={`${isWoundCareOnly ? 'mb-1 mt-0.5 text-[9.5px] pl-1.5 border-l-2' : 'mb-1 mt-0.5 text-[8.5px] pl-1.5 border-l-[1.5px]'} relative z-10 text-black leading-tight border-black`}>
                                 <strong className="font-black">หมายเหตุ:</strong> {safeStr(appt.note)}
                             </div>
                         )}
                     </div>
 
-                    <div className="mt-auto flex flex-col gap-0.5 relative z-10">
+                    <div className="mt-auto flex flex-col gap-0.5 relative z-10 pt-0.5">
                         <div className="text-center py-0.5">
-                            <div className="text-[10px] font-black text-black flex items-center justify-center gap-1 uppercase tracking-[0.01em] leading-none">"ฉีดยา-ทำแผล นอกเวลาราชการ มีค่าบริการนอกเวลา 50 บาท"</div>
+                            <div className="text-[9.5px] font-black text-black flex items-center justify-center gap-1 uppercase tracking-[0.01em] leading-none">"ทำแผลนอกเวลาราชการ มีค่าบริการนอกเวลา 50 บาท"</div>
                         </div>
                         <div className="flex justify-between items-end text-[7.5px] pt-0.5 border-t border-black opacity-100 leading-none">
                             <div className="italic font-bold leading-tight space-y-0.5 text-black">
