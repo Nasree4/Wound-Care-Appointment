@@ -360,106 +360,239 @@
                 const cleanDate = ev.date.replace(/-/g, '');
                 const dateParam = `${cleanDate}T083000/${cleanDate}T160000`;
                 const title = `${ev.title} รพ.เจาะไอร้อง (${patientName} HN:${patient.hn})`;
-                const details = `ใบนัด รพ.เจาะไอร้อง\\nผู้ป่วย: ${patientName} (HN: ${patient.hn})\\nรายการ: ${ev.title}\\n* กรุณานำใบนัดมาด้วยทุกครั้ง`;
+                const details = `ใบนัด รพ.เจาะไอร้อง\nผู้ป่วย: ${patientName} (HN: ${patient.hn})\nรายการ: ${ev.title}\n* กรุณานำใบนัดมาด้วยทุกครั้ง`;
                 const location = 'โรงพยาบาลเจาะไอร้อง จ.นราธิวาส';
                 const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${dateParam}&location=${encodeURIComponent(location)}&details=${encodeURIComponent(details)}`;
                 window.open(url, '_blank');
             };
 
+            const vaccines = data.calculatedDates ? [...new Set(data.calculatedDates.map(d => d.category))] : [];
+
+            const getCategoryTitle = (cat) => {
+                if (cat === 'dT') return 'วัคซีนบาดทะยัก (dT)';
+                if (cat === 'PCEC') return 'วัคซีนพิษสุนัขบ้า (Rabies Vaccine)';
+                return `ตารางนัดฉีดวัคซีน ${cat}`;
+            };
+
             return (
-                <div className="min-h-screen bg-slate-100 p-3 sm:p-6 text-slate-800 font-sans">
+                <div className="min-h-screen bg-slate-200/90 py-4 px-2 sm:px-4 text-slate-800 font-sans">
                     <div className="max-w-md mx-auto space-y-3">
-                        {/* Header */}
-                        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 text-center space-y-1">
-                            <img src="https://img2.pic.in.th/1245bce0a0bc0e53aa53.png" alt="Hospital Logo" className="h-12 mx-auto object-contain" />
-                            <h1 className="text-base font-black text-slate-900 mt-1">ใบนัดรับบริการทางการแพทย์ (ดิจิทัล)</h1>
-                            <div className="text-xs font-bold text-slate-500">โรงพยาบาลเจาะไอร้อง จ.นราธิวาส</div>
-                        </div>
 
-                        {/* Patient Info Card */}
-                        <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 space-y-2">
-                            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
-                                <div>
-                                    <div className="text-[10px] font-black text-slate-400 uppercase">ชื่อผู้ป่วย</div>
-                                    <div className="text-sm font-black text-slate-900">{patientName}</div>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-[10px] font-black text-slate-400 uppercase">HN</div>
-                                    <div className="text-sm font-mono font-black text-blue-600">{patient.hn}</div>
-                                </div>
-                            </div>
-                            {data.woundType && (
-                                <div className="text-xs text-slate-600 space-y-0.5">
-                                    <div><strong>แผล:</strong> {data.woundType} ({data.woundLocation || '-'})</div>
-                                    <div><strong>การทำแผล:</strong> <span className="font-bold text-emerald-700">{data.dressingFrequency || '-'}</span> {data.stitchCount ? `(เย็บ ${data.stitchCount} เข็ม)` : ''}</div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* 1-Click Action: Add All to Calendar */}
+                        {/* Top Action Bar: Add All to Calendar */}
                         {allEvents.length > 0 && (
-                            <button 
-                                onClick={() => generateAllIcsCalendar(allEvents, patientName, patient.hn)}
-                                className="w-full bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-3.5 rounded-2xl shadow-lg shadow-emerald-600/20 font-black text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-95 transition-all"
-                            >
-                                <span className="text-lg">⭐</span>
-                                <div className="text-left leading-tight">
-                                    <div>บันทึกทุกวันนัดลงปฏิทินมือถือ (1 คลิก)</div>
-                                    <div className="text-[10px] text-emerald-100 font-normal">ลงปฏิทินครบทุกเข็มและวันตัดไหมพร้อมกันทันที</div>
-                                </div>
-                            </button>
+                            <div className="bg-white rounded-2xl p-3 shadow-md border border-emerald-200 animate-in fade-in slide-in-from-top-2">
+                                <button 
+                                    onClick={() => generateAllIcsCalendar(allEvents, patientName, patient.hn)}
+                                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white p-3 rounded-xl shadow-md font-black text-xs sm:text-sm flex items-center justify-center gap-2 active:scale-95 transition-all"
+                                >
+                                    <span className="text-xl">⭐</span>
+                                    <div className="text-left leading-tight">
+                                        <div className="font-black">บันทึกทุกวันนัดลงปฏิทินมือถือ (1 คลิก)</div>
+                                        <div className="text-[10px] text-emerald-100 font-normal">ลงปฏิทินครบทุกเข็มและวันตัดไหมพร้อมกันทันที</div>
+                                    </div>
+                                </button>
+                            </div>
                         )}
 
-                        {/* Timeline list of all appointment dates */}
-                        <div className="space-y-2">
-                            <div className="text-xs font-black text-slate-500 uppercase px-1 flex justify-between items-center">
-                                <span>ตารางนัดหมายทั้งหมด ({allEvents.length} รายการ)</span>
-                                <span className="text-[10px] text-slate-400 font-normal">กดบันทึกแยกรายเข็มได้</span>
+                        {/* THE OFFICIAL HOSPITAL APPOINTMENT CARD (เหมือนใบนัดจริง) */}
+                        <div className="bg-white rounded-2xl shadow-xl border-2 border-slate-300 p-4 sm:p-5 relative overflow-hidden text-black leading-tight">
+                            
+                            {/* Watermark Logo */}
+                            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-[0.14] pointer-events-none watermark">
+                                <img src="https://img1.pic.in.th/images/1bf299103031b07d1.png" alt="Watermark" className="w-56 sm:w-64 object-contain logo-bw" onError={(e) => e.target.style.display = 'none'} />
                             </div>
 
-                            {allEvents.map((ev, index) => (
-                                <div key={ev.id || index} className="bg-white rounded-2xl p-3.5 shadow-sm border border-slate-200 space-y-2.5">
-                                    <div className="flex justify-between items-start gap-2">
-                                        <div>
-                                            <span className={`inline-block text-[10px] font-black px-2 py-0.5 rounded-full border mb-1 ${ev.badgeColor}`}>
-                                                {ev.badge}
-                                            </span>
-                                            <div className="text-sm font-black text-slate-900 leading-tight">
-                                                {formatThaiDate(ev.date, { day: 'numeric', month: 'long', year: 'numeric' })}
+                            {/* Header Section */}
+                            <div className="flex justify-between items-center relative z-10 pb-2 mb-2 border-b-2 border-black">
+                                <div className="text-left pr-1 space-y-0.5">
+                                    <h2 className="text-sm sm:text-base font-black uppercase tracking-tight text-black leading-tight">ใบนัดรับบริการทางการแพทย์</h2>
+                                    <div className="text-[8px] text-black font-bold uppercase tracking-tight opacity-90">Hospital Appointment Card (Digital)</div>
+                                    <div className="text-[9.5px] text-black font-extrabold mt-0.5">โรงพยาบาลเจาะไอร้อง จ.นราธิวาส</div>
+                                </div>
+                                <div className="flex justify-end items-center">
+                                    <img src="https://img2.pic.in.th/1245bce0a0bc0e53aa53.png" alt="Hospital Logo" className="max-h-12 h-11 object-contain logo-bw" onError={(e) => e.target.style.display = 'none'} />
+                                </div>
+                            </div>
+
+                            {/* Patient Info Section */}
+                            <div className="space-y-1 mb-2.5 relative z-10 text-black text-xs">
+                                <div className="flex justify-between items-end border-b border-dotted border-black pb-1 gap-1">
+                                    <div className="flex items-baseline flex-1 min-w-0">
+                                        <strong className="shrink-0 mr-1 font-bold text-xs">ชื่อ-สกุล:</strong>
+                                        <span className="font-black text-sm text-black truncate">{patientName}</span>
+                                    </div>
+                                    <div className="shrink-0 font-bold whitespace-nowrap">
+                                        <strong>HN:</strong> <span className="font-black text-sm font-mono ml-0.5 text-black">{patient.hn}</span>
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-between items-end border-b border-dotted border-black pb-1 gap-1 text-[11px]">
+                                    <div className="flex items-baseline flex-1 min-w-0">
+                                        <strong className="shrink-0 mr-1 font-bold">สิทธิ:</strong>
+                                        <span className="font-black text-black truncate">{data.privilege || 'บัตรทอง (UC)'}</span>
+                                    </div>
+                                    <div className="shrink-0 font-bold whitespace-nowrap">
+                                        <strong>นน.:</strong> <span className="font-black text-black mx-0.5">{data.weight ? data.weight : '-'}</span> กก.
+                                    </div>
+                                </div>
+
+                                <div className="flex justify-between pt-0.5 text-[9.5px] font-medium text-black">
+                                    <div><strong className="font-bold">วันที่รับบริการ:</strong> {formatThaiDate(data.visitDate || new Date().toLocaleDateString('en-CA'), { day: 'numeric', month: 'long', year: 'numeric' })}</div>
+                                    <div><strong className="font-bold">เวลาบริการ:</strong> 08:30 - 16:00 น.</div>
+                                </div>
+                            </div>
+
+                            {/* Wound Care Plan (แผนการรักษา) */}
+                            {(data.woundType || data.dressingFrequency || data.stitchCount) && (
+                                <div className="mb-2.5 border-[1.2px] border-black rounded-lg p-2 bg-white/90 relative z-10 text-black">
+                                    <div className="flex items-center justify-between border-b border-black pb-1 mb-1">
+                                        <div className="text-[11px] font-black uppercase tracking-wider flex items-center gap-1.5 text-black">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-black inline-block"></span>
+                                            แผนการรักษา (Wound Care Plan)
+                                        </div>
+                                        {data.stitchCount ? (
+                                            <div className="text-[9px] font-black text-black border border-black px-1.5 py-0.5 rounded-full bg-gray-50">
+                                                เย็บ {data.stitchCount} เข็ม
                                             </div>
-                                            <div className="text-xs text-slate-500 font-bold mt-0.5">
-                                                ⏰ เวลา {ev.time}
+                                        ) : null}
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-1.5 text-xs">
+                                        <div className="bg-gray-50 border border-black/70 rounded-md p-1.5 space-y-0.5">
+                                            <div className="text-[9px] font-bold uppercase text-gray-700 tracking-tight">ลักษณะ & ตำแหน่งบาดแผล</div>
+                                            <div className="text-[12px] font-black leading-tight text-black">
+                                                {data.woundType ? safeStr(data.woundType.split(' ')[0]) : '-'}
+                                            </div>
+                                            {data.woundLocation && (
+                                                <div className="text-[10px] font-bold text-gray-800">
+                                                    ตำแหน่ง: <span className="font-black text-black">{safeStr(data.woundLocation)}</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="bg-gray-50 border border-black/70 rounded-md p-1.5 space-y-0.5 flex flex-col justify-between">
+                                            <div>
+                                                <div className="text-[9px] font-bold uppercase text-gray-700 tracking-tight">ความถี่การล้างทำแผล</div>
+                                                <div className="text-[12px] font-black text-black mt-0.5">
+                                                    <span className="underline decoration-2 underline-offset-2">{safeStr(data.dressingFrequency) || 'ทุกวัน'}</span>
+                                                </div>
+                                            </div>
+                                            <div className="text-[8px] font-bold text-gray-600 italic">
+                                                * ระวังอย่าให้แผลเปียกน้ำ
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+                            )}
 
-                                    <div className="pt-2 border-t border-slate-100 flex justify-between items-center">
-                                        <div className="text-[10px] text-slate-400 font-medium">
-                                            📍 {ev.location}
-                                        </div>
+                            {/* Vaccine Tables (ตารางนัดฉีดวัคซีนเหมือนใบนัดจริง) */}
+                            {vaccines.map((cat) => (
+                                <div key={cat} className="mb-2.5 relative z-10">
+                                    <div className="bg-gray-100 border border-black px-2 py-0.5 flex items-center justify-between">
+                                        <span className="text-[10.5px] font-black uppercase tracking-wider text-black">{getCategoryTitle(cat)}</span>
+                                        <span className="text-[8.5px] font-bold text-gray-600">เวลา 08:30 - 16:00 น.</span>
+                                    </div>
+                                    <table className="w-full border-collapse border-x border-b border-black">
+                                        <thead>
+                                            <tr className="bg-gray-50 border-b border-black font-black text-[9px]">
+                                                <th className="text-left border-r border-black px-2 py-1 text-black">รายการ</th>
+                                                <th className="text-center border-r border-black w-28 text-black">วันที่นัด</th>
+                                                <th className="text-center w-24 text-black">ปฏิทิน</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {data.calculatedDates.filter(d => d.category === cat).map((item, idx) => {
+                                                const matchingEvent = allEvents.find(e => e.date === item.date && e.title.includes(item.label));
+                                                return (
+                                                    <tr key={idx} className="border-b border-black last:border-b-0 leading-tight">
+                                                        <td className="border-r border-black px-2 py-1.5">
+                                                            <div className="flex items-center justify-between gap-1">
+                                                                <span className="text-[12px] font-black text-black tracking-tight">
+                                                                    {safeStr(item.label)}
+                                                                </span>
+                                                                {item.desc && (
+                                                                    <span className="text-[9px] font-bold text-gray-600 shrink-0">
+                                                                        {safeStr(item.desc).includes('IM') ? '(IM 0.5ml)' : (safeStr(item.desc).includes('ID') ? '(ID 0.1ml)' : '')}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                        <td className="border-r border-black font-black text-black text-center px-2 py-1.5 text-[12.5px]">
+                                                            {formatThaiDate(item.date, { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                        </td>
+                                                        <td className="text-center px-1 py-1">
+                                                            <button 
+                                                                onClick={() => openSingleGoogleCalendar(matchingEvent || { title: item.label, date: item.date, location: 'รพ.เจาะไอร้อง' })}
+                                                                className="bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 px-2 py-0.5 rounded text-[9.5px] font-black inline-flex items-center gap-1 active:scale-95 transition"
+                                                            >
+                                                                <span>📅</span> บันทึก
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            ))}
+
+                            {/* กำหนดนัดตัดไหม (Stitches Off) */}
+                            {data.stitchRemovalDate && (
+                                <div className="mb-2.5 relative z-10 border-[1.2px] border-black text-center rounded-lg bg-gray-50/90 shadow-sm border-dashed p-2.5 space-y-1">
+                                    <div className="text-[10px] font-black uppercase text-black flex items-center justify-center gap-1">
+                                        ✂️ กำหนดนัดตัดไหม (Stitches Off)
+                                    </div>
+                                    <div className="text-base sm:text-lg font-black text-black underline decoration-double decoration-2 underline-offset-4 tracking-tight">
+                                        {formatThaiDate(data.stitchRemovalDate, { day: 'numeric', month: 'long', year: 'numeric' })}
+                                    </div>
+                                    <div className="text-[9px] text-gray-800 font-bold">
+                                        เวลา 08:30 - 16:00 น. (ห้องฉุกเฉิน / ห้องทำแผล)
+                                    </div>
+                                    <div className="pt-1">
                                         <button 
-                                            onClick={() => openSingleGoogleCalendar(ev)}
-                                            className="bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100 px-3 py-1.5 rounded-xl font-black text-[11px] flex items-center gap-1 active:scale-95 transition-all shrink-0"
+                                            onClick={() => openSingleGoogleCalendar({ title: 'นัดตัดไหม (Stitches Off)', date: data.stitchRemovalDate, location: 'ห้องฉุกเฉิน / ห้องทำแผล รพ.เจาะไอร้อง' })}
+                                            className="bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300 px-3 py-1 rounded-lg text-[10.5px] font-black inline-flex items-center gap-1 active:scale-95 transition"
                                         >
-                                            <span>📅</span> บันทึกเข็มนี้
+                                            <span>📅</span> บันทึกวันตัดไหมลง Google Calendar
                                         </button>
                                     </div>
                                 </div>
-                            ))}
+                            )}
+
+                            {/* Footer Section */}
+                            <div className="mt-3 flex flex-col gap-1 relative z-10 pt-1 border-t border-black">
+                                <div className="text-center py-0.5">
+                                    <div className="text-[10.5px] font-black text-black flex items-center justify-center gap-1 uppercase tracking-tight">
+                                        "ทำแผลนอกเวลาราชการ มีค่าบริการนอกเวลา 50 บาท"
+                                    </div>
+                                </div>
+                                <div className="flex justify-between items-end text-[8px] pt-1 border-t border-dotted border-black leading-tight text-black">
+                                    <div className="space-y-0.5">
+                                        <div className="text-black font-black">* กรุณานำใบนัดใบนี้และบัตรประชาชนมาด้วยทุกครั้ง</div>
+                                        <div className="text-rose-700 font-black">* เจ็บป่วยฉุกเฉินโทร 1669 ตลอด 24 ชม.</div>
+                                        <div className="text-black font-mono uppercase text-[7px]">CHOAIRONG HOSPITAL | WOUNDCARE-DIGITAL</div>
+                                    </div>
+                                    <div className="text-center min-w-[75px] text-black">
+                                        <div className="font-black uppercase border-b border-black pb-0.5 mb-0.5 text-[9.5px]">เจ้าหน้าที่พยาบาล</div>
+                                        <div className="text-[7px] font-black uppercase tracking-widest">Authorized</div>
+                                    </div>
+                                </div>
+                            </div>
+
                         </div>
 
-                        {/* Footer Notes */}
-                        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 text-center space-y-1">
-                            <div className="text-xs font-black text-amber-900">"ทำแผลนอกเวลาราชการ มีค่าบริการนอกเวลา 50 บาท"</div>
-                            <div className="text-[10px] text-amber-800 font-bold">* กรุณานำบัตรประชาชนและใบนัดมาด้วยทุกครั้ง</div>
-                            <div className="text-[10px] text-rose-700 font-black">เจ็บป่วยฉุกเฉินโทร 1669 ตลอด 24 ชม.</div>
+                        {/* Bottom Action Footer */}
+                        <div className="text-center space-y-2 pt-1 pb-6">
+                            <div className="text-xs text-slate-500 font-bold">
+                                💡 ท่านสามารถแคปหน้าจอ (Screenshot) หรือบันทึกลงปฏิทินเพื่อกันลืม
+                            </div>
+                            <div>
+                                <a href={window.location.origin + window.location.pathname} className="text-xs text-slate-500 hover:text-slate-800 font-bold underline">
+                                    เปิดระบบเจ้าหน้าที่ (Staff Login)
+                                </a>
+                            </div>
                         </div>
 
-                        <div className="text-center pt-2 pb-6">
-                            <a href={window.location.origin + window.location.pathname} className="text-xs text-slate-400 font-bold underline">
-                                เปิดระบบเจ้าหน้าที่ (Staff Login)
-                            </a>
-                        </div>
                     </div>
                 </div>
             );
@@ -495,11 +628,18 @@
             const isPortal = Boolean(effectivePortalUrl && (qrMode === 'portal' || !qrMode));
 
             if (isPortal) {
-                // ULTRA-COMPACT URL (<60 chars -> Version 2 chunky QR)
+                // ULTRA-COMPACT URL (<80 chars -> Version 2 chunky QR)
                 const queryParams = new URLSearchParams();
                 if (patientHn) queryParams.set('h', patientHn);
                 if (patientName) queryParams.set('n', patientName);
                 if (appt.stitchRemovalDate) queryParams.set('s', appt.stitchRemovalDate);
+                if (appt.woundType) queryParams.set('w', appt.woundType.split(' ')[0]);
+                if (appt.woundLocation) queryParams.set('loc', appt.woundLocation.split(' ')[0]);
+                if (appt.dressingFrequency) queryParams.set('f', appt.dressingFrequency);
+                if (appt.stitchCount) queryParams.set('c', appt.stitchCount);
+                if (appt.privilege) queryParams.set('pr', appt.privilege.split(' ')[0]);
+                if (appt.weight) queryParams.set('wt', appt.weight);
+                if (appt.visitDate) queryParams.set('d', appt.visitDate);
                 const vList = (appt.calculatedDates || []).map(d => `${d.label.replace(/\s+/g, '')}:${d.date}`).join(',');
                 if (vList) queryParams.set('v', vList);
 
@@ -794,8 +934,12 @@
                             lname: '',
                             stitchRemovalDate: s || '',
                             woundType: params.get('w') || '',
+                            woundLocation: params.get('loc') || '',
                             dressingFrequency: params.get('f') || params.get('freq') || '',
                             stitchCount: params.get('c') || params.get('stc') || '',
+                            privilege: params.get('pr') || '',
+                            weight: params.get('wt') || '',
+                            visitDate: params.get('d') || params.get('date') || new Date().toLocaleDateString('en-CA'),
                             calculatedDates
                         };
                     }
@@ -1505,6 +1649,9 @@
                                 <button onClick={handleClearDraft} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-rose-50 text-rose-500 px-4 py-2.5 rounded-2xl font-black hover:bg-rose-100 transition active:scale-95 border border-rose-200 uppercase text-xs">
                                     Clear
                                 </button>
+                                <a href="manual.html" target="_blank" className="flex-1 md:flex-none flex items-center justify-center gap-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-emerald-200 px-3.5 py-2.5 rounded-2xl font-black transition active:scale-95 border uppercase text-xs" title="เปิดคู่มือการใช้งาน One-Page">
+                                    📖 คู่มือ
+                                </a>
                                 <button onClick={() => setMode(mode === 'settings' ? 'app' : 'settings')} className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl font-black transition active:scale-95 border uppercase text-xs ${mode === 'settings' ? 'bg-slate-800 text-white border-slate-800 shadow-md' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200'}`}>
                                     ⚙️ Settings
                                 </button>
